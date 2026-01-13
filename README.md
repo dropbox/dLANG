@@ -10,14 +10,12 @@ Compilation should be proof. These compilers don't just generate code—they gen
 
 | Project | Description | Status |
 |---------|-------------|--------|
-| **tRust** | Verified Rust: compilation = proof | Planned |
-| **tSwift** | Verified Swift for iOS/macOS | Planned |
-| **tC** | Verified C with ACSL specs | Planned |
-| **kani_fast** | Rust bounded model checker | Planned |
-
-## Status
-
-These projects are in **preview** status. APIs may change.
+| **tRust** | Trusted Rust. Compilation = proof. Transpiles to verified Rust with z4 backend. | Planned |
+| **tSwift** | Trusted Swift. Same approach for iOS/macOS. Coordinates FFI with tRust. | Planned |
+| **tC** | Trusted C. ACSL specs + Clang translation validation. | Planned |
+| **tcore** | Shared verification core for tRust/tSwift/tC ecosystem. | Planned |
+| **rustc-index-verified** | Formally verified rustc_index. Proving Rust compiler internals correct. | Planned |
+| **tensor-forge** | Verified tensor ops for Apple Silicon. | Planned |
 
 ## License
 
