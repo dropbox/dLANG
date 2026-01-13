@@ -18,7 +18,7 @@ Verified compiler tooling.
 | **tC** | Trusted C. ACSL specs + Clang translation validation. | Preview |
 | **tcore** | Shared verification core for tRust/tSwift/tC ecosystem. | Planned |
 | **rustc-index-verified** | Formally verified rustc_index. Proving Rust compiler internals correct. | Preview |
-| **mly** | Verified tensor ops for Apple Silicon. | Preview |
+| **mly** | Verified PyTorch for Apple Silicon. tRust code, gamma-crown NN verification. | Planned |
 
 ## License
 
