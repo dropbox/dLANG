@@ -1,10 +1,13 @@
 # dLANG - Verified Compilers
 
+![Status](https://img.shields.io/badge/status-preview-orange)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
+
 Verified compiler tooling from Dropbox.
 
 ## Thesis
 
-Compilation should be proof. These compilers don't just generate code—they generate code with machine-checkable guarantees. No runtime checks needed when the compiler proves correctness at build time.
+**Compilation should be proof.** Every runtime check is an admission that the compiler didn't do its job. These compilers generate code with machine-checkable correctness guarantees—memory safety, bounds checking, invariant preservation—all verified at compile time, not hoped for at runtime. When tRust compiles, you don't just get a binary; you get a proof.
 
 ## Projects
 
