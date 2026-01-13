@@ -1,0 +1,19 @@
+// SIL test file: UInt8 unsigned division by zero detection
+// Tests that div-by-zero auto-VC is generated for udiv_Int8
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// UInt8 unsigned division - may divide by zero
+sil hidden @div_uint8 : $@convention(thin) (UInt8, UInt8) -> UInt8 {
+bb0(%0 : $UInt8, %1 : $UInt8):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %4 = struct_extract %0, #UInt8._value
+  %5 = struct_extract %1, #UInt8._value
+  %6 = builtin "udiv_Int8"(%4, %5) : $Builtin.Int8
+  %7 = struct $UInt8 (%6)
+  return %7
+}

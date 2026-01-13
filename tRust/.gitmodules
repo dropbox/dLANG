@@ -1,0 +1,6 @@
+[submodule "deps/kani_fast"]
+	path = deps/kani_fast
+	url = git@github.com:ayates_dbx/kani_fast.git
+[submodule "deps/rustc-index-verified"]
+	path = deps/rustc-index-verified
+	url = git@github.com:ayates_dbx/rustc-index-verified.git

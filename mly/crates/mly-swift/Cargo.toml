@@ -1,0 +1,15 @@
+[package]
+name = "mly-swift"
+version.workspace = true
+edition.workspace = true
+description = "Swift bindings for Tensor Forge"
+
+[lib]
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+mly-core = { workspace = true }
+mly-runtime = { workspace = true }
+
+[build-dependencies]
+# cbindgen = "0.26"

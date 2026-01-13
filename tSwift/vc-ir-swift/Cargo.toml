@@ -1,0 +1,58 @@
+[package]
+name = "vc-ir-swift"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Andrew Yates <ayates@dropbox.com>"]
+description = "Swift verification using Z4 SMT solver"
+license = "Apache-2.0"
+repository = "https://github.com/dropbox/dLANG/tSwift"
+readme = "README.md"
+keywords = ["swift", "verification", "formal-methods", "smt", "compiler"]
+categories = ["development-tools", "compilers"]
+
+[dependencies]
+# Z4 SMT solver (pure Rust, no C++ dependencies)
+z4 = { git = "ssh://git@github.com/dropbox/z4.git" }
+
+# Z3 SMT solver (optional, supports non-linear arithmetic).
+# Requires system Z3 install (e.g., `brew install z3` on macOS).
+# Note: z3-static feature is deprecated due to broken bundled z3-sys build.
+# Migration to z3 0.19 (which fixes bundled build) tracked for future work.
+z3 = { version = "0.12", optional = true }
+
+# JSON serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+
+# Hashing for incremental verification cache
+sha2 = "0.10"
+
+[features]
+default = []
+# Enable Z3 fallback for non-linear arithmetic (requires system Z3)
+# Install via: `brew install z3` (macOS) or `apt install libz3-dev` (Linux)
+z3-fallback = ["z3"]
+# DEPRECATED: z3-static is broken due to z3-sys 0.8.1 bundled z3 source incompatibility
+# with modern C++ compilers. Use z3-fallback with system Z3 instead.
+# Migration to z3 0.19+ (which uses z3-sys 0.10.4 with fixed bundled build) pending.
+z3-static = ["z3-fallback", "z3/static-link-z3"]
+
+[lib]
+name = "vc_ir_swift"
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[[bin]]
+name = "tswift-verify"
+path = "src/bin/tswift_verify.rs"
+
+[[bin]]
+name = "tswift-ffi-extract"
+path = "src/bin/tswift_ffi_extract.rs"
+
+[[bin]]
+name = "tswift-ffi-verify"
+path = "src/bin/tswift_ffi_verify.rs"

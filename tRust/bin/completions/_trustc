@@ -1,0 +1,40 @@
+#compdef trustc
+# Zsh completion for trustc
+# Install: cp _trustc ~/.zsh/completions/ (or /usr/local/share/zsh/site-functions/)
+
+_trustc() {
+    local -a trustc_opts rustc_opts
+
+    trustc_opts=(
+        '--no-verify[Compile without running verification]'
+        '--verify-verbose[Enable verbose verification output]'
+        '--profile[Show verification timing breakdown]'
+        '--output-format=[Output format]:format:(human json)'
+        '--no-cache[Disable all verification caching]'
+        '--no-function-cache[Disable function-level caching only]'
+        '--cache-clear[Clear project verification cache and exit]'
+        '--use-global-cache[Enable global cache shared across projects]'
+        '--global-cache-clear[Clear both project and global caches and exit]'
+        '--cache-stats[Show verification cache statistics]'
+        '--explain=[Explain verification error code]:code:(E0900 E0901 E0902 E0903 E0904 E0905 E0906 E0907 E0908 E0909)'
+        '(-h --help)'{-h,--help}'[Show help message]'
+    )
+
+    rustc_opts=(
+        '-o[Write output to FILENAME]:filename:_files'
+        '--out-dir=[Write output to DIR]:directory:_files -/'
+        '--edition=[Set Rust edition]:edition:(2015 2018 2021 2024)'
+        '--crate-type=[Type of crate to build]:type:(bin lib rlib dylib cdylib staticlib proc-macro)'
+        '--crate-name=[Specify the name of the crate]:name:'
+        '--emit=[Comma separated list of types to emit]:types:(asm llvm-bc llvm-ir obj link metadata mir dep-info)'
+        '--target=[Target triple]:triple:'
+        '--sysroot=[Override the system root]:dir:_files -/'
+    )
+
+    _arguments -s \
+        $trustc_opts \
+        $rustc_opts \
+        '*:Rust source file:_files -g "*.rs"'
+}
+
+_trustc "$@"

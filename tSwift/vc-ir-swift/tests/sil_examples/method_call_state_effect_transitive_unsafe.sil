@@ -1,0 +1,51 @@
+// SIL example for MethodCallStateEffect with transitive call chain.
+// Tests that type invariants are checked after calling methods that
+// transitively modify state (top -> mid -> helper).
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Counter.init with type invariant: count >= 0
+sil [_invariant "count >= 0"] @Counter_init : $@convention(thin) (@owned Counter) -> @owned Counter {
+bb0(%0 : $Counter):
+  debug_value %0, let, name "self", argno 1
+  %1 = ref_element_addr %0, #Counter.count
+  %2 = integer_literal $Builtin.Int64, 0
+  %3 = struct $Int (%2)
+  store %3 to %1 : $*Int
+  return %0 : $Counter
+}
+
+// Counter.helper - modifies count (the ultimate modifier in the chain)
+sil @Counter_helper : $@convention(thin) (@guaranteed Counter) -> () {
+bb0(%0 : $Counter):
+  debug_value %0, let, name "self", argno 1
+  %1 = ref_element_addr %0, #Counter.count
+  %2 = integer_literal $Builtin.Int64, 10
+  %3 = struct $Int (%2)
+  store %3 to %1 : $*Int
+  %result = tuple ()
+  return %result : $()
+}
+
+// Counter.mid - calls helper, but does not store directly
+sil @Counter_mid : $@convention(thin) (@guaranteed Counter) -> () {
+bb0(%0 : $Counter):
+  debug_value %0, let, name "self", argno 1
+  %func = function_ref @Counter_helper : $@convention(thin) (@guaranteed Counter) -> ()
+  %call = apply %func(%0) : $@convention(thin) (@guaranteed Counter) -> ()
+  %result = tuple ()
+  return %result : $()
+}
+
+// Counter.top - calls mid, should generate MethodCallStateEffect via transitive effects
+sil @Counter_top : $@convention(thin) (@guaranteed Counter) -> () {
+bb0(%0 : $Counter):
+  debug_value %0, let, name "self", argno 1
+  %func = function_ref @Counter_mid : $@convention(thin) (@guaranteed Counter) -> ()
+  %call = apply %func(%0) : $@convention(thin) (@guaranteed Counter) -> ()
+  %result = tuple ()
+  return %result : $()
+}

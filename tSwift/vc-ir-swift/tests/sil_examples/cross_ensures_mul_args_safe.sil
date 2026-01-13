@@ -1,0 +1,46 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// atLeast: identity function, postcondition promises result >= x (trivially true)
+// This postcondition will be ASSUMED by callers after the call returns.
+@_ensures("result >= x")
+func atLeast(_ x: Int) -> Int
+
+// useAtLeast: calls atLeast(a*2), postcondition promises result >= a*2
+// This tests MULTIPLICATION ARGUMENT EXPRESSION substitution in postcondition assumptions.
+//
+// Analysis:
+// - Callee postcondition: result >= x
+// - Call: atLeast(a*2) where a*2 is computed via SIL builtin smul
+// - Substituted assumption: call_result >= (a*2)
+// - Caller returns call_result, so result == call_result
+// - Postcondition to prove: result >= a*2
+// - With assumption call_result >= a*2 and result == call_result => result >= a*2 (QED)
+@_ensures("result >= a * 2")
+func useAtLeast(_ a: Int) -> Int
+
+// atLeast implementation: returns x (identity function, satisfies result >= x)
+sil hidden @$s15mul_args_module7atLeastyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  return %0
+} // end sil function '$s15mul_args_module7atLeastyS2iF'
+
+// useAtLeast implementation - computes a*2, then calls atLeast(a*2)
+sil hidden @$s15mul_args_module10useAtLeastySiSiF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "a", argno 1
+  // Compute a*2
+  %2 = struct_extract %0, #Int._value      // a._value
+  %3 = integer_literal $Builtin.Int64, 2
+  %4 = integer_literal $Builtin.Int1, 0
+  %5 = builtin "smul_with_overflow_Int64"(%2, %3, %4) : $(Builtin.Int64, Builtin.Int1)
+  %6 = tuple_extract %5, 0                  // raw result = a*2
+  %7 = struct $Int (%6)                     // wrap as Int
+  // Call atLeast(a*2)
+  %8 = function_ref @$s15mul_args_module7atLeastyS2iF : $@convention(thin) (Int) -> Int
+  %9 = apply %8(%7) : $@convention(thin) (Int) -> Int
+  return %9
+} // end sil function '$s15mul_args_module10useAtLeastySiSiF'

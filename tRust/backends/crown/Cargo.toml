@@ -1,0 +1,26 @@
+[package]
+name = "trust_crown"
+version = "0.1.0"
+edition = "2021"
+description = "CROWN neural network verification backend for tRust"
+license = "MIT OR Apache-2.0"
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["verification", "rust", "compiler"]
+categories = ["development-tools", "compilers"]
+
+[features]
+default = []
+# Enable ONNX model loading (requires edition2024-compatible cargo)
+onnx = ["onnx-extractor"]
+
+[dependencies]
+vc_ir = { path = "../../vc_ir" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+byteorder = "1.5"  # For reading binary data
+onnx-extractor = { version = "0.3.3", optional = true }  # For loading ONNX models (requires edition2024)
+safetensors = "0.4"  # For loading PyTorch .safetensors models
+
+# Would link to the CROWN Rust port
+# crown_core = { path = "../../../crown" }

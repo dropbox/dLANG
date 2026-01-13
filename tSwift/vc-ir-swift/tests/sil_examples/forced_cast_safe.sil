@@ -1,0 +1,24 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+class Animal {}
+class Dog : Animal {}
+
+// safeCast: force casts an Animal to Dog with precondition that it IS a Dog.
+// This should PASS verification because the precondition guarantees the cast is valid.
+// The is_type(animal, type_Dog) precondition matches the auto-VC's type check.
+// loc "cast.swift":3:12 marks the forced cast location
+
+@_requires("is_type(animal, type_Dog)")
+func safeCast(_ animal: Animal) -> Dog
+
+sil hidden @$s16forced_cast_safe8safeCastAA3DogCAA6AnimalCF : $@convention(thin) (@guaranteed Animal) -> @owned Dog {
+bb0(%0 : $Animal):
+  debug_value %0, let, name "animal", argno 1
+  // Force cast WITH precondition - this is safe because we require the animal IS a Dog
+  %2 = unconditional_checked_cast %0 : $Animal to $Dog, loc "cast.swift":3:12
+  return %2
+} // end sil function '$s16forced_cast_safe8safeCastAA3DogCAA6AnimalCF'

@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "crate_name": "test_backend",
+  "timestamp": "2026-01-03T12:00:00Z",
+  "contracts": [
+    {
+      "function": "create_user",
+      "module": "api::users",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/users",
+        "method": "POST"
+      },
+      "requires": [
+        {
+          "expr": "email.len() > 0",
+          "label": "email must not be empty"
+        },
+        {
+          "expr": "age >= 18",
+          "label": "user must be adult"
+        }
+      ],
+      "ensures": [
+        {
+          "expr": "result.id > 0"
+        }
+      ],
+      "params": [
+        {"name": "email", "type": "String"},
+        {"name": "age", "type": "u32"}
+      ],
+      "return_type": "User",
+      "pure": false,
+      "effects": ["IO"]
+    },
+    {
+      "function": "get_user",
+      "module": "api::users",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/users/{id}",
+        "method": "GET"
+      },
+      "requires": [
+        {
+          "expr": "id > 0",
+          "label": "valid user ID"
+        }
+      ],
+      "ensures": [],
+      "params": [
+        {"name": "id", "type": "u64"}
+      ],
+      "return_type": "Option<User>",
+      "pure": true,
+      "effects": []
+    }
+  ],
+  "types": {
+    "User": {
+      "kind": "struct",
+      "fields": [
+        {"name": "id", "type": "u64"},
+        {"name": "email", "type": "String"},
+        {"name": "age", "type": "u32"}
+      ]
+    }
+  }
+}

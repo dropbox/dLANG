@@ -1,0 +1,10 @@
+[package]
+name = "mly-cpu"
+version.workspace = true
+edition.workspace = true
+description = "CPU SIMD backend for Tensor Forge"
+
+[dependencies]
+mly-core = { workspace = true }
+ndarray = { workspace = true }
+rayon = { workspace = true }

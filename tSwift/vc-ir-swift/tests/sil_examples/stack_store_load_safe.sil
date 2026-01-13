@@ -1,0 +1,23 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Exercise alloc_stack + store + load so that postconditions referencing `result`
+// can be discharged when the return value is loaded from a stack slot.
+
+@_requires("x > 0")
+@_ensures("result == x")
+func idThroughVar(_ x: Int) -> Int
+
+sil hidden @idThroughVar : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  %1 = alloc_stack $Int
+  store %0 to [init] %1 : $*Int
+  %2 = load [trivial] %1 : $*Int
+  dealloc_stack %1
+  return %2
+} // end sil function 'idThroughVar'
+

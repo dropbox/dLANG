@@ -1,0 +1,21 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+class Animal {}
+class Dog : Animal {}
+
+// unsafeCast: force casts an Animal to Dog without checking
+// This should FAIL verification because the Animal may not be a Dog
+// loc "cast.swift":3:12 marks the forced cast location
+func unsafeCast(_ animal: Animal) -> Dog
+
+sil hidden @$s11forced_cast10unsafeCastAA3DogCAA6AnimalCF : $@convention(thin) (@guaranteed Animal) -> @owned Dog {
+bb0(%0 : $Animal):
+  debug_value %0, let, name "animal", argno 1
+  // Force cast without any check - this is unsafe!
+  %2 = unconditional_checked_cast %0 : $Animal to $Dog, loc "cast.swift":3:12
+  return %2
+} // end sil function '$s11forced_cast10unsafeCastAA3DogCAA6AnimalCF'

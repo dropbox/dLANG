@@ -1,0 +1,31 @@
+# Ruff configuration - Python linter
+# https://docs.astral.sh/ruff/
+
+[lint]
+select = ["ALL"]
+ignore = [
+    "D",       # docstrings
+    "ANN",     # type annotations
+    "ERA",     # commented code
+    "T20",     # print statements
+    "FBT",     # boolean trap
+    "PLR",     # pylint refactor
+    "Q",       # quotes
+    "C901",    # complexity
+    "DTZ",     # timezone
+    "S",       # security (trusted code)
+    "INP",     # namespace
+    "FA",      # future annotations
+    "BLE",     # blind except
+    "E501",    # line length
+    "PTH",     # pathlib style
+    "EM",      # exception messages
+    "TRY",     # tryceratops
+    "ARG",     # unused args
+    "RUF",     # ruff specific
+    "SIM",     # simplify
+    "PLW",     # pylint warnings
+    "PERF203", # try-except in loop (acceptable for resilient file processing)
+    "SLF",     # private member access (acceptable in tests)
+    "COM812",  # trailing comma - conflicts with ruff formatter
+]

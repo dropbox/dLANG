@@ -1,0 +1,11 @@
+[package]
+name = "mly-metal"
+version.workspace = true
+edition.workspace = true
+description = "Metal GPU backend for Tensor Forge"
+
+[dependencies]
+mly-core = { workspace = true }
+mly-dsl = { workspace = true }
+metal = { workspace = true }
+thiserror = { workspace = true }

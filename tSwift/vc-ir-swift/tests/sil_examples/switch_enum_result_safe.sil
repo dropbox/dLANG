@@ -1,0 +1,32 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// unwrapResultOrZero: returns the success value if Result is .success, otherwise returns 0
+// With precondition that the success payload (if present) is non-negative,
+// we can prove the postcondition result >= 0
+// Note: unwrap_success_0 refers to the payload extracted from Result.success case
+@_requires("unwrap_success_0 >= 0")
+@_ensures("result >= 0")
+func unwrapResultOrZero(_ value: Result<Int, Error>) -> Int
+
+// Implementation using switch_enum on Result<Int, Error>
+// Note: Using simple mangled name pattern that swift-demangle can handle
+sil hidden @$s11result_test18unwrapResultOrZeroyS2iF : $@convention(thin) (Result<Int, Error>) -> Int {
+bb0(%0 : $Result<Int, Error>):
+  debug_value %0, let, name "value", argno 1
+  switch_enum %0 : $Result<Int, Error>, case #Result.success!enumelt: bb1, case #Result.failure!enumelt: bb2
+
+bb1(%1 : $Int):
+  // In Success case: %1 is the unwrapped Int (success value)
+  debug_value %1, let, name "payload"
+  return %1
+
+bb2(%2 : $Error):
+  // In Failure case: return 0 (default value, satisfies result >= 0)
+  %3 = integer_literal $Builtin.Int64, 0
+  %4 = struct $Int (%3)
+  return %4
+} // end sil function

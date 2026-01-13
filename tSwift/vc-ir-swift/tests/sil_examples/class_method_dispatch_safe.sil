@@ -1,0 +1,126 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Test file for class allocation, method dispatch, upcasts, and global access
+
+class Base {
+  @_hasStorage var value: Int { get set }
+  func getValue() -> Int
+  @objc deinit
+  init()
+}
+
+class Derived : Base {
+  override func getValue() -> Int
+  override init()
+}
+
+protocol ValueProvider {
+  func getValue() -> Int
+}
+
+// Global variable for testing global_addr
+sil_global hidden @$s12class_test6globalSivp : $Int
+
+// Test function: Creates instance, calls method, returns value
+// @_requires: true (no precondition)
+// @_ensures: result >= 0 (the returned value is non-negative)
+@_requires("true")
+@_ensures("result >= 0")
+func testAllocAndMethod() -> Int
+
+// main
+sil @main : $@convention(c) (Int32, UnsafeMutablePointer<Optional<UnsafeMutablePointer<Int8>>>) -> Int32 {
+bb0(%0 : $Int32, %1 : $UnsafeMutablePointer<Optional<UnsafeMutablePointer<Int8>>>):
+  %2 = integer_literal $Builtin.Int32, 0
+  %3 = struct $Int32 (%2)
+  return %3
+}
+
+// testAllocAndMethod() - alloc_ref, class_method, upcast
+sil hidden @$s10class_test18testAllocAndMethodSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate a Derived instance
+  %0 = alloc_ref $Derived
+
+  // Upcast to Base
+  %1 = upcast %0 : $Derived to $Base
+
+  // Get class method (vtable lookup)
+  %2 = class_method %1 : $Base, #Base.getValue : (Base) -> () -> Int, $@convention(method) (@guaranteed Base) -> Int
+
+  // Apply the method
+  %3 = apply %2(%1) : $@convention(method) (@guaranteed Base) -> Int
+
+  // Deallocate the instance
+  dealloc_ref %0 : $Derived
+
+  // Return 42 (always non-negative, satisfies postcondition)
+  %5 = integer_literal $Builtin.Int64, 42
+  %6 = struct $Int (%5)
+  return %6
+}
+
+// Test global variable access
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testGlobalAccess() -> Int
+
+sil hidden @$s10class_test16testGlobalAccessSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Access global variable address
+  %0 = global_addr @$s12class_test6globalSivp : $*Int
+
+  // Load the global value
+  %1 = begin_access [read] [dynamic] %0 : $*Int
+  %2 = load %1 : $*Int
+  end_access %1 : $*Int
+
+  return %2 : $Int
+}
+
+// Simple witness method test (simplified syntax for parser)
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testWitnessMethod() -> Int
+
+sil hidden @$s10class_test17testWitnessMethodSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Witness method lookup - simplified
+  %0 = witness_method $Base, #ValueProvider.getValue : $@convention(witness_method: ValueProvider) (@in_guaranteed Base) -> Int
+
+  // Return a constant to satisfy spec
+  %1 = integer_literal $Builtin.Int64, 10
+  %2 = struct $Int (%1)
+  return %2 : $Int
+}
+
+// VTable for Base
+sil_vtable Base {
+  #Base.value!getter: (Base) -> () -> Int : @$s10class_test4BaseC5valueSivg
+  #Base.value!setter: (Base) -> (Int) -> () : @$s10class_test4BaseC5valueSivs
+  #Base.getValue: (Base) -> () -> Int : @$s10class_test4BaseC8getValueSiyF
+  #Base.init!allocator: (Base.Type) -> () -> Base : @$s10class_test4BaseCACycfC
+  #Base.deinit!deallocator: @$s10class_test4BaseCfD
+}
+
+// VTable for Derived
+sil_vtable Derived {
+  #Base.value!getter: (Base) -> () -> Int : @$s10class_test4BaseC5valueSivg
+  #Base.value!setter: (Base) -> (Int) -> () : @$s10class_test4BaseC5valueSivs
+  #Base.getValue: (Base) -> () -> Int : @$s10class_test7DerivedC8getValueSiyF
+  #Derived.init!allocator: (Derived.Type) -> () -> Derived : @$s10class_test7DerivedCACycfC
+  #Derived.deinit!deallocator: @$s10class_test7DerivedCfD
+}
+
+// Witness table
+sil_witness_table hidden Base: ValueProvider module class_test {
+  method #ValueProvider.getValue: <Self where Self : ValueProvider> (Self) -> () -> Int : @$s10class_test4BaseCAA13ValueProviderA2aDP8getValueSiyFTW
+}

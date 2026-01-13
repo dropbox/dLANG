@@ -1,0 +1,21 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Minimal SIL capturing unsigned division-by-zero detection:
+// - udiv_Int64 builtin for unsigned division
+// - No precondition on divisor, so verification should FAIL
+//
+// This file is used by integration tests for `tswift-verify --sil`.
+sil hidden @unsignedDivide : $@convention(thin) (UInt, UInt) -> UInt {
+bb0(%0 : $UInt, %1 : $UInt):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %2 = struct_extract %0, #UInt._value
+  %3 = struct_extract %1, #UInt._value
+  %4 = builtin "udiv_Int64"(%2, %3) : $Builtin.Int64
+  %5 = struct $UInt (%4)
+  return %5
+}

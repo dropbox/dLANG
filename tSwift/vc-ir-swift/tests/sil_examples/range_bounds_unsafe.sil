@@ -1,0 +1,39 @@
+// Test range bounds checking
+// Swift: start..<end requires start <= end
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// makeRange: Create a half-open range from start to end
+// Swift: func makeRange(start: Int, end: Int) -> Range<Int>
+// This checks that start <= end
+sil @makeRange : $@convention(thin) (Int, Int) -> () {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "start", argno 1
+  debug_value %1, let, name "end", argno 2
+  %4 = struct_extract %0, #Int._value
+  %5 = struct_extract %1, #Int._value
+  // Check: start <= end (i.e., !(end < start))
+  %6 = builtin "cmp_slt_Int64"(%5, %4) : $Builtin.Int1
+  cond_fail %6, "Range requires lowerBound <= upperBound"
+  %8 = tuple ()
+  return %8
+}
+
+// makeClosedRange: Create a closed range from start to end
+// Swift: func makeClosedRange(start: Int, end: Int) -> ClosedRange<Int>
+// This also checks that start <= end
+sil @makeClosedRange : $@convention(thin) (Int, Int) -> () {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "start", argno 1
+  debug_value %1, let, name "end", argno 2
+  %4 = struct_extract %0, #Int._value
+  %5 = struct_extract %1, #Int._value
+  // Check: start <= end (i.e., !(end < start))
+  %6 = builtin "cmp_slt_Int64"(%5, %4) : $Builtin.Int1
+  cond_fail %6, "Range requires lowerBound <= upperBound"
+  %8 = tuple ()
+  return %8
+}

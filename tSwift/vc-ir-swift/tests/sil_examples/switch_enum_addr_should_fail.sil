@@ -1,0 +1,32 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// getOrNegative: returns the unwrapped value if .some, otherwise returns -1
+// This should FAIL verification because the none case returns -1 which violates result >= 0
+@_requires("unwrap_0 >= 0")
+@_ensures("result >= 0")
+func getOrNegative(_ opt: Optional<Int>) -> Int
+
+sil hidden @$s16switch_enum_addr13getOrNegativeyS2iSgF : $@convention(thin) (@in Optional<Int>) -> Int {
+bb0(%0 : $*Optional<Int>):
+  // Switch on the address-based Optional
+  switch_enum_addr %0 : $*Optional<Int>, case #Optional.some!enumelt: bb1, case #Optional.none!enumelt: bb2
+
+bb1:
+  // .some case: extract the payload address and load the value
+  %2 = unchecked_take_enum_data_addr %0 : $*Optional<Int>, #Optional.some!enumelt
+  %3 = load %2 : $*Int
+  br bb3(%3)
+
+bb2:
+  // .none case: return -1 (this violates result >= 0)
+  %4 = integer_literal $Builtin.Int64, -1
+  %5 = struct $Int (%4)
+  br bb3(%5)
+
+bb3(%6 : $Int):
+  return %6
+} // end sil function '$s16switch_enum_addr13getOrNegativeyS2iSgF'

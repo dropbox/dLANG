@@ -1,0 +1,41 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Tests init_existential_addr and open_existential_addr for protocol existential handling
+// These instructions are used for indirect existential storage (protocol types as addresses)
+
+// Protocol for testing
+protocol Describable {
+    func describe() -> String
+}
+
+// processExistential: Takes an indirect protocol existential and returns it unchanged
+// This is a simple identity function to test existential address instructions parse correctly
+@_ensures("true")
+func processExistential(_ value: inout Describable) -> ()
+
+sil hidden @$s16existential_addr18processExistentialyyxzlF : $@convention(thin) <T where T : Describable> (@inout T) -> () {
+bb0(%0 : $*T):
+  debug_value %0, var, name "value", argno 1, expr op_deref
+  %2 = tuple ()
+  return %2 : $()
+} // end sil function '$s16existential_addr18processExistentialyyxzlF'
+
+// wrapInExistential: Wraps a concrete value in an existential container
+// Uses init_existential_addr to prepare the storage
+@_ensures("true")
+func wrapInExistential<T: Describable>(_ value: T, into: inout Describable)
+
+sil hidden @$s16existential_addr18wrapInExistential_4intoyxz_ypztAA11DescribableRzlF : $@convention(thin) <T where T : Describable> (@in T, @inout Describable) -> () {
+bb0(%0 : $*T, %1 : $*Describable):
+  debug_value %0, let, name "value", argno 1, expr op_deref
+  // Initialize existential address for the concrete type T
+  %3 = init_existential_addr %1 : $*Describable, $T
+  // Copy the value into the existential
+  copy_addr %0 to [init] %3 : $*T
+  %5 = tuple ()
+  return %5 : $()
+} // end sil function '$s16existential_addr18wrapInExistential_4intoyxz_ypztAA11DescribableRzlF'

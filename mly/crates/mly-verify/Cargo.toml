@@ -1,0 +1,18 @@
+[package]
+name = "mly-verify"
+version.workspace = true
+edition.workspace = true
+description = "Verification integration for Tensor Forge"
+
+[dependencies]
+mly-core = { workspace = true }
+thiserror = { workspace = true }
+
+# Optional verification backends
+# gamma-crown-core = { path = "../../gamma-crown/crates/gamma-core", optional = true }
+# z4-core = { path = "../../z4/crates/z4-core", optional = true }
+
+[features]
+default = []
+# gamma-crown = ["dep:gamma-crown-core"]
+# z4 = ["dep:z4-core"]

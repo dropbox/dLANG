@@ -1,0 +1,53 @@
+[package]
+name = "tc-verify"
+version = "0.1.0"
+edition = "2021"
+authors = ["Andrew Yates <ayates@dropbox.com>"]
+description = "C verification layer bridging tRust↔tSwift with ACSL specs and translation validation"
+license = "Apache-2.0"
+repository = "https://github.com/dropbox/dLANG/tC"
+keywords = ["verification", "c", "formal-methods", "ffi", "acsl"]
+categories = ["development-tools", "compilers"]
+
+[lib]
+name = "tc_verify"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tc-verify"
+path = "src/main.rs"
+
+[dependencies]
+# C parsing via libclang
+clang-sys = "1.6"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# VC IR (shared with tRust) - will be a git dependency
+# vc-ir = { git = "https://github.com/dropbox/tRust", branch = "main" }
+
+[dev-dependencies]
+tempfile = "3.8"
+pretty_assertions = "1.4"
+
+[features]
+default = []
+# Enable translation validation (requires Alive2)
+translation-validation = []
+# Enable z4 backend
+z4 = []
+
+[workspace]

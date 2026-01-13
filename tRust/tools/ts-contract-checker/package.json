@@ -1,0 +1,22 @@
+{
+  "name": "ts-contract-checker",
+  "version": "0.1.0",
+  "description": "TypeScript contract checker for tRust cross-language verification (Phase 6.5.6)",
+  "main": "dist/index.js",
+  "bin": {
+    "ts-contract-checker": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "check": "node dist/cli.js",
+    "test": "node dist/cli.js --contracts test/contracts.json test/frontend.ts"
+  },
+  "keywords": ["tRust", "verification", "contracts", "typescript"],
+  "author": "tRust Project",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "dependencies": {}
+}

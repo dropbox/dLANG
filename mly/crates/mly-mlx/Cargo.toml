@@ -1,0 +1,12 @@
+[package]
+name = "mly-mlx"
+version.workspace = true
+edition.workspace = true
+description = "MLX model import bridge for Tensor Forge"
+
+[dependencies]
+mly-core = { workspace = true }
+safetensors = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

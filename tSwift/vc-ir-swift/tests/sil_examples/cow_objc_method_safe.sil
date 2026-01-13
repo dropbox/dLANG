@@ -1,0 +1,238 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Test file for COW mutation, ObjC method dispatch, and unmanaged ref counting
+
+class NSObject {
+  @objc deinit
+  init()
+}
+
+@objc class MyObjCClass : NSObject {
+  @_hasStorage var value: Int { get set }
+  @objc func doSomething() -> Int
+  @objc deinit
+  init()
+}
+
+// Buffer class for COW testing
+class ArrayBuffer {
+  @_hasStorage var count: Int { get set }
+  @_hasStorage var capacity: Int { get set }
+  @objc deinit
+  init()
+}
+
+// Test function: objc_method dispatch
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testObjcMethod() -> Int
+
+sil hidden @$s15cow_objc_method14testObjcMethodSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate ObjC class instance
+  %0 = alloc_ref $MyObjCClass
+
+  // Look up ObjC method implementation
+  %1 = objc_method %0 : $MyObjCClass, #MyObjCClass.doSomething!foreign : (MyObjCClass) -> () -> Int, $@convention(objc_method) (MyObjCClass) -> Int
+
+  // Apply the method
+  %2 = apply %1(%0) : $@convention(objc_method) (MyObjCClass) -> Int
+
+  // Release instance
+  strong_release %0 : $MyObjCClass
+
+  return %2 : $Int
+}
+
+// Test function: objc_super_method dispatch
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testObjcSuperMethod() -> Int
+
+sil hidden @$s15cow_objc_method19testObjcSuperMethodSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate ObjC class instance
+  %0 = alloc_ref $MyObjCClass
+
+  // Look up ObjC super method implementation
+  %1 = objc_super_method %0 : $MyObjCClass, #NSObject.init!initializer.foreign : (NSObject.Type) -> () -> NSObject, $@convention(objc_method) (@owned MyObjCClass) -> @owned MyObjCClass
+
+  // Clean up
+  strong_release %0 : $MyObjCClass
+
+  // Return constant
+  %3 = integer_literal $Builtin.Int64, 42
+  %4 = struct $Int (%3)
+  return %4 : $Int
+}
+
+// Test function: begin_cow_mutation and end_cow_mutation
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testCowMutation() -> Int
+
+sil hidden @$s15cow_objc_method15testCowMutationSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate buffer
+  %0 = alloc_ref $ArrayBuffer
+
+  // Begin COW mutation - returns (Builtin.Int1, ArrayBuffer)
+  // Int1 is true if buffer is uniquely referenced
+  (%1, %2) = begin_cow_mutation %0 : $ArrayBuffer
+
+  // Check if unique (branch would go here in real code)
+  // For this test, we just proceed assuming unique
+
+  // Mutate the buffer (get field address)
+  %3 = ref_element_addr %2 : $ArrayBuffer, #ArrayBuffer.count
+
+  // Store new count
+  %4 = integer_literal $Builtin.Int64, 10
+  %5 = struct $Int (%4)
+  store %5 to %3 : $*Int
+
+  // End COW mutation
+  %6 = end_cow_mutation %2 : $ArrayBuffer
+
+  // Clean up
+  strong_release %6 : $ArrayBuffer
+
+  // Return the count we stored
+  return %5 : $Int
+}
+
+// Test function: begin_cow_mutation with [native] attribute
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testCowMutationNative() -> Int
+
+sil hidden @$s15cow_objc_method21testCowMutationNativeSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate buffer
+  %0 = alloc_ref $ArrayBuffer
+
+  // Begin COW mutation with [native] attribute
+  (%1, %2) = begin_cow_mutation [native] %0 : $ArrayBuffer
+
+  // End COW mutation with [keep_unique] attribute
+  %3 = end_cow_mutation [keep_unique] %2 : $ArrayBuffer
+
+  // Clean up
+  strong_release %3 : $ArrayBuffer
+
+  // Return constant
+  %5 = integer_literal $Builtin.Int64, 99
+  %6 = struct $Int (%5)
+  return %6 : $Int
+}
+
+// Test function: end_cow_mutation_addr for address types
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testCowMutationAddr() -> Int
+
+sil hidden @$s15cow_objc_method19testCowMutationAddrSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate struct on stack
+  %0 = alloc_stack $ArrayBuffer
+
+  // Mark end of mutation for address
+  end_cow_mutation_addr %0 : $*ArrayBuffer
+
+  // Clean up
+  dealloc_stack %0 : $*ArrayBuffer
+
+  // Return constant
+  %3 = integer_literal $Builtin.Int64, 77
+  %4 = struct $Int (%3)
+  return %4 : $Int
+}
+
+// Test function: unmanaged_retain_value
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testUnmanagedRetain() -> Int
+
+sil hidden @$s15cow_objc_method20testUnmanagedRetainSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate class instance
+  %0 = alloc_ref $MyObjCClass
+
+  // Perform unmanaged retain (without ownership tracking)
+  unmanaged_retain_value %0 : $MyObjCClass
+
+  // Perform unmanaged release to balance
+  unmanaged_release_value %0 : $MyObjCClass
+
+  // Normal release to deallocate
+  strong_release %0 : $MyObjCClass
+
+  // Return constant
+  %4 = integer_literal $Builtin.Int64, 55
+  %5 = struct $Int (%4)
+  return %5 : $Int
+}
+
+// Test function: unmanaged_autorelease_value
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testUnmanagedAutorelease() -> Int
+
+sil hidden @$s15cow_objc_method24testUnmanagedAutoreleaseSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate class instance
+  %0 = alloc_ref $MyObjCClass
+
+  // Perform unmanaged autorelease
+  unmanaged_autorelease_value %0 : $MyObjCClass
+
+  // Return constant
+  %2 = integer_literal $Builtin.Int64, 66
+  %3 = struct $Int (%2)
+  return %3 : $Int
+}
+
+// Stub for ObjC method
+sil hidden @$s15cow_objc_method11MyObjCClassC11doSomethingSiyF : $@convention(method) (@guaranteed MyObjCClass) -> Int {
+bb0(%0 : $MyObjCClass):
+  %1 = integer_literal $Builtin.Int64, 123
+  %2 = struct $Int (%1)
+  return %2 : $Int
+}
+
+// VTable for ArrayBuffer
+sil_vtable ArrayBuffer {
+  #ArrayBuffer.count!getter: (ArrayBuffer) -> () -> Int : @$s15cow_objc_method11ArrayBufferC5countSivg
+  #ArrayBuffer.count!setter: (ArrayBuffer) -> (Int) -> () : @$s15cow_objc_method11ArrayBufferC5countSivs
+  #ArrayBuffer.capacity!getter: (ArrayBuffer) -> () -> Int : @$s15cow_objc_method11ArrayBufferC8capacitySivg
+  #ArrayBuffer.capacity!setter: (ArrayBuffer) -> (Int) -> () : @$s15cow_objc_method11ArrayBufferC8capacitySivs
+  #ArrayBuffer.init!allocator: (ArrayBuffer.Type) -> () -> ArrayBuffer : @$s15cow_objc_method11ArrayBufferCACycfC
+  #ArrayBuffer.deinit!deallocator: @$s15cow_objc_method11ArrayBufferCfD
+}
+
+// VTable for MyObjCClass
+sil_vtable MyObjCClass {
+  #MyObjCClass.value!getter: (MyObjCClass) -> () -> Int : @$s15cow_objc_method11MyObjCClassC5valueSivg
+  #MyObjCClass.value!setter: (MyObjCClass) -> (Int) -> () : @$s15cow_objc_method11MyObjCClassC5valueSivs
+  #MyObjCClass.doSomething: (MyObjCClass) -> () -> Int : @$s15cow_objc_method11MyObjCClassC11doSomethingSiyF
+  #MyObjCClass.init!allocator: (MyObjCClass.Type) -> () -> MyObjCClass : @$s15cow_objc_method11MyObjCClassCACycfC
+  #MyObjCClass.deinit!deallocator: @$s15cow_objc_method11MyObjCClassCfD
+}

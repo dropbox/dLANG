@@ -1,0 +1,157 @@
+{
+  "version": "1.0",
+  "crate_name": "backend",
+  "timestamp": "2026-01-03T12:00:00Z",
+  "contracts": [
+    {
+      "function": "create_user",
+      "module": "api::users",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/users",
+        "method": "POST"
+      },
+      "requires": [
+        {
+          "expr": "email.len() > 0",
+          "label": "email must not be empty"
+        },
+        {
+          "expr": "age >= 18",
+          "label": "user must be adult"
+        }
+      ],
+      "ensures": [
+        {
+          "expr": "result.id > 0"
+        },
+        {
+          "expr": "result.age == age"
+        }
+      ],
+      "params": [
+        {
+          "name": "email",
+          "type": "String"
+        },
+        {
+          "name": "age",
+          "type": "u32"
+        }
+      ],
+      "return_type": "Result<User, ApiError>",
+      "pure": false,
+      "effects": ["IO"]
+    },
+    {
+      "function": "get_user",
+      "module": "api::users",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/users/{id}",
+        "method": "GET"
+      },
+      "requires": [
+        {
+          "expr": "id > 0",
+          "label": "valid user ID"
+        }
+      ],
+      "ensures": [
+        {
+          "expr": "result.is_some() ==> result.unwrap().id == id"
+        }
+      ],
+      "params": [
+        {
+          "name": "id",
+          "type": "u64"
+        }
+      ],
+      "return_type": "Option<User>",
+      "pure": true,
+      "effects": []
+    },
+    {
+      "function": "delete_user",
+      "module": "api::users",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/users/{id}",
+        "method": "DELETE"
+      },
+      "requires": [
+        {
+          "expr": "id > 0"
+        }
+      ],
+      "ensures": [],
+      "params": [
+        {
+          "name": "id",
+          "type": "u64"
+        }
+      ],
+      "return_type": "Result<(), ApiError>",
+      "pure": false,
+      "effects": ["IO"]
+    },
+    {
+      "function": "calculate_age",
+      "module": "api::users",
+      "visibility": "public",
+      "requires": [
+        {
+          "expr": "birth_year > 1900"
+        },
+        {
+          "expr": "birth_year <= current_year"
+        }
+      ],
+      "ensures": [
+        {
+          "expr": "result >= 0"
+        }
+      ],
+      "params": [
+        {
+          "name": "birth_year",
+          "type": "u32"
+        },
+        {
+          "name": "current_year",
+          "type": "u32"
+        }
+      ],
+      "return_type": "u32",
+      "pure": true,
+      "effects": []
+    }
+  ],
+  "types": {
+    "User": {
+      "kind": "struct",
+      "fields": [
+        {"name": "id", "type": "u64"},
+        {"name": "email", "type": "String"},
+        {"name": "age", "type": "u32"},
+        {"name": "created_at", "type": "u64"}
+      ]
+    },
+    "CreateUserRequest": {
+      "kind": "struct",
+      "fields": [
+        {"name": "email", "type": "String"},
+        {"name": "age", "type": "u32"}
+      ]
+    },
+    "ApiError": {
+      "kind": "enum",
+      "fields": [
+        {"name": "InvalidEmail"},
+        {"name": "UnderageUser"},
+        {"name": "InternalError"}
+      ]
+    }
+  }
+}

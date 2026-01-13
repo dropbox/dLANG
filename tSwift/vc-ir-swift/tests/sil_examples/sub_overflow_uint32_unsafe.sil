@@ -1,0 +1,24 @@
+// SIL test file: UInt32 Subtraction with overflow check
+// Tests that bitwidth-specific bounds (0 to 4294967295) are used for subtraction
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// UInt32 sub function with overflow check
+// Unsigned subtraction can underflow when a - b < 0
+sil hidden @sub_uint32 : $@convention(thin) (UInt32, UInt32) -> UInt32 {
+bb0(%0 : $UInt32, %1 : $UInt32):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %4 = struct_extract %0, #UInt32._value
+  %5 = struct_extract %1, #UInt32._value
+  %6 = integer_literal $Builtin.Int1, -1
+  %7 = builtin "usub_with_overflow_Int32"(%4, %5, %6) : $(Builtin.Int32, Builtin.Int1)
+  %8 = tuple_extract %7, 0
+  %9 = tuple_extract %7, 1
+  cond_fail %9, "arithmetic overflow"
+  %11 = struct $UInt32 (%8)
+  return %11
+}

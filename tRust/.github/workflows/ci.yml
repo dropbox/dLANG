@@ -1,0 +1,98 @@
+name: tRust CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Unit tests that don't require the built compiler
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check rustc_vc compiles
+        run: cargo check -p rustc_vc
+
+      - name: Run rustc_vc tests
+        run: cargo test -p rustc_vc
+
+      - name: Run trust_z3 tests
+        run: cargo test -p trust_z3
+
+  # Format and lint checks
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+        continue-on-error: true
+
+      - name: Clippy
+        run: cargo clippy -p rustc_vc -p vc_ir -- -D warnings
+        continue-on-error: true
+
+  # Documentation: Full integration tests require tRust compiler
+  #
+  # The integration tests (./run_tests.sh) require a built tRust compiler
+  # which is stored in upstream/rustc (gitignored, separate repo).
+  #
+  # To enable full CI, the tRust fork of rustc needs to be:
+  # 1. Pushed to a public/accessible GitHub repository
+  # 2. Referenced in this workflow for cloning and building
+  #
+  # Until then, use the pre-commit hook locally:
+  #   ./scripts/install-hooks.sh
+  #
+  # Or run manually:
+  #   cd upstream/rustc && ./x.py build --stage 1
+  #   ./run_tests.sh
+
+  # Placeholder for full integration tests (blocked on upstream access)
+  # integration-tests:
+  #   name: Integration Tests
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Clone tRust upstream
+  #       run: git clone --depth 1 --branch sync/1.92.0 https://github.com/dropbox/dLANG/tRust-compiler.git upstream/rustc
+  #     - name: Build stage 1 compiler
+  #       run: cd upstream/rustc && ./x.py build --stage 1
+  #     - name: Run integration tests
+  #       run: ./run_tests.sh

@@ -1,0 +1,23 @@
+#compdef trustv
+# Zsh completion for trustv
+# Install: cp _trustv ~/.zsh/completions/ (or /usr/local/share/zsh/site-functions/)
+
+_trustv() {
+    local -a trustv_opts
+
+    trustv_opts=(
+        '(-v --verbose)'{-v,--verbose}'[Enable verbose verification output]'
+        '--profile[Show verification timing breakdown]'
+        '--output-format=[Output format]:format:(human json)'
+        '--no-cache[Disable verification caching]'
+        '--use-global-cache[Enable global cache shared across projects]'
+        '--explain=[Explain verification error code]:code:(E0900 E0901 E0902 E0903 E0904 E0905 E0906 E0907 E0908 E0909)'
+        '(-h --help)'{-h,--help}'[Show help message]'
+    )
+
+    _arguments -s \
+        $trustv_opts \
+        '*:Rust source file:_files -g "*.rs"'
+}
+
+_trustv "$@"

@@ -1,0 +1,37 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// multiply: multiply two integers (produces non-linear arithmetic UNKNOWN)
+// Spec: result == x * y (variable multiplication is non-linear, solver returns unknown)
+@_ensures("result == x * y")
+func multiply(_ x: Int, _ y: Int) -> Int
+
+// main
+sil @main : $@convention(c) (Int32, UnsafeMutablePointer<Optional<UnsafeMutablePointer<Int8>>>) -> Int32 {
+bb0(%0 : $Int32, %1 : $UnsafeMutablePointer<Optional<UnsafeMutablePointer<Int8>>>):
+  %2 = integer_literal $Builtin.Int32, 0
+  %3 = struct $Int32 (%2)
+  return %3
+} // end sil function 'main'
+
+// multiply(_:_:)
+sil hidden @$s14nonlinear_test8multiplyySiSi_SitF : $@convention(thin) (Int, Int) -> Int {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "x", argno 1
+  debug_value %1, let, name "y", argno 2
+  // Extract raw values
+  %4 = struct_extract %0, #Int._value
+  %5 = struct_extract %1, #Int._value
+  // Multiply: x * y (non-linear when both are symbolic)
+  // Use -1 for overflow checking flag to generate auto-VC
+  %6 = integer_literal $Builtin.Int1, -1
+  %7 = builtin "smul_with_overflow_Int64"(%4, %5, %6) : $(Builtin.Int64, Builtin.Int1)
+  %8 = tuple_extract %7, 0
+  %9 = tuple_extract %7, 1
+  cond_fail %9, "arithmetic overflow"
+  %11 = struct $Int (%8)
+  return %11
+} // end sil function '$s14nonlinear_test8multiplyySiSi_SitF'

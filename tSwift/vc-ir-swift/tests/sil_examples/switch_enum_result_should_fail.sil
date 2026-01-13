@@ -1,0 +1,32 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// unwrapResultOrNegative: returns the success value if Result is .success, otherwise returns -1
+// This SHOULD FAIL verification because:
+// - No precondition constraining success payload (it could be negative)
+// - The failure branch returns -1 which violates result >= 0
+// Similar to Optional's switch_enum_should_fail.sil
+@_ensures("result >= 0")
+func unwrapResultOrNegative(_ value: Result<Int, Error>) -> Int
+
+// Implementation using switch_enum on Result<Int, Error>
+// Note: Using simple mangled name pattern that swift-demangle can handle
+sil hidden @$s11result_test22unwrapResultOrNegativeyS2iF : $@convention(thin) (Result<Int, Error>) -> Int {
+bb0(%0 : $Result<Int, Error>):
+  debug_value %0, let, name "value", argno 1
+  switch_enum %0 : $Result<Int, Error>, case #Result.success!enumelt: bb1, case #Result.failure!enumelt: bb2
+
+bb1(%1 : $Int):
+  // In Success case: %1 is the unwrapped Int (success value)
+  debug_value %1, let, name "payload"
+  return %1
+
+bb2(%2 : $Error):
+  // In Failure case: return -1 (BUG: violates postcondition!)
+  %3 = integer_literal $Builtin.Int64, -1
+  %4 = struct $Int (%3)
+  return %4
+} // end sil function

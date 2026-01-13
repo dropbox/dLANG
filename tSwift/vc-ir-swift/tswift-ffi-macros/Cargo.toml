@@ -1,0 +1,19 @@
+[package]
+name = "tswift-ffi-macros"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Andrew Yates <ayates@dropbox.com>"]
+description = "FFI annotation macros for tSwift verification"
+license = "Apache-2.0"
+repository = "https://github.com/dropbox/dLANG/tSwift"
+keywords = ["swift", "ffi", "verification", "proc-macro"]
+categories = ["development-tools", "compilers"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }

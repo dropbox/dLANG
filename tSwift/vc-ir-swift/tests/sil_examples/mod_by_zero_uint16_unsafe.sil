@@ -1,0 +1,19 @@
+// SIL test file: UInt16 unsigned modulo by zero detection
+// Tests that mod-by-zero auto-VC is generated for urem_Int16
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// UInt16 unsigned modulo - may divide by zero
+sil hidden @mod_uint16 : $@convention(thin) (UInt16, UInt16) -> UInt16 {
+bb0(%0 : $UInt16, %1 : $UInt16):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %4 = struct_extract %0, #UInt16._value
+  %5 = struct_extract %1, #UInt16._value
+  %6 = builtin "urem_Int16"(%4, %5) : $Builtin.Int16
+  %7 = struct $UInt16 (%6)
+  return %7
+}

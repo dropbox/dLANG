@@ -1,0 +1,172 @@
+diff --git a/include/swift/AST/SILOptions.h b/include/swift/AST/SILOptions.h
+index 1234567890a..abcdef12345 100644
+--- a/include/swift/AST/SILOptions.h
++++ b/include/swift/AST/SILOptions.h
+@@ -279,6 +279,21 @@ public:
+   /// Whether to verify exclusivity.
+   bool VerifyExclusivity = false;
+
++  // ============================================================================
++  // tSwift Formal Verification Options
++  // ============================================================================
++
++  /// Enable formal verification of @requires/@ensures contracts.
++  bool VerifyContracts = false;
++
++  /// Enable strict mode: verification failure stops compilation.
++  bool VerifyContractsStrict = false;
++
++  /// Verify all functions, even those without explicit contracts.
++  /// This enables automatic verification of overflow, div-by-zero, bounds, nil.
++  bool VerifyAllFunctions = false;
++
++  /// Timeout for verification solver in seconds (0 = no timeout).
++  unsigned VerifyTimeout = 30;
++
++  /// Path for JSON verification report output.
++  std::string VerifyReportPath;
++
+   /// Instrument code to generate profiling information.
+   bool GenerateProfile = false;
+
+diff --git a/include/swift/Option/FrontendOptions.td b/include/swift/Option/FrontendOptions.td
+index abcdef12345..9876543210a 100644
+--- a/include/swift/Option/FrontendOptions.td
++++ b/include/swift/Option/FrontendOptions.td
+@@ -1560,4 +1560,28 @@ def disable_ossa_verify_complete :
+   Flag<["-"], "disable-ossa-verify-complete">,
+   HelpText<"Do not verify linear OSSA lifetimes after SILGen">;
+
++// ============================================================================
++// tSwift Formal Verification Options
++// ============================================================================
++
++def verify_contracts : Flag<["-"], "verify-contracts">,
++  HelpText<"Enable formal verification of @requires/@ensures contracts">;
++
++def verify_contracts_strict : Flag<["-"], "verify-contracts-strict">,
++  HelpText<"Enable strict mode: verification failure stops compilation">;
++
++def verify_all_functions : Flag<["-"], "verify-all-functions">,
++  HelpText<"Verify all functions, including those without explicit contracts">;
++
++def verify_timeout : Separate<["-"], "verify-timeout">,
++  MetaVarName<"<seconds>">,
++  HelpText<"Timeout for verification solver in seconds (default 30)">;
++
++def verify_timeout_EQ : Joined<["-"], "verify-timeout=">,
++  Alias<verify_timeout>;
++
++def verify_report : Separate<["-"], "verify-report">,
++  MetaVarName<"<path>">,
++  HelpText<"Path for JSON verification report output">;
++
++def verify_report_EQ : Joined<["-"], "verify-report=">,
++  Alias<verify_report>;
+
+diff --git a/include/swift/SILOptimizer/PassManager/Passes.def b/include/swift/SILOptimizer/PassManager/Passes.def
+index 9876543210a..fedcba098765 100644
+--- a/include/swift/SILOptimizer/PassManager/Passes.def
++++ b/include/swift/SILOptimizer/PassManager/Passes.def
+@@ -330,6 +330,11 @@ MODULE_PASS(SILMoveOnlyWrappedTypeEliminator, "sil-move-only-wrapped-type-elimin
+ MODULE_PASS(RegionBasedIsolation, "region-based-isolation",
+             "Region-Based Isolation Analysis")
+
++// tSwift Formal Verification Pass
++LEGACY_PASS(SILVerification, "sil-verification",
++            "Formal verification of @requires/@ensures contracts")
++
++// tSwift Verification Summary Pass (runs after all function verification)
++MODULE_PASS(SILVerificationSummary, "sil-verification-summary",
++            "Output verification summary after all functions are verified")
++
+ #undef IRGEN_PASS
+ #undef MODULE_PASS
+ #undef LEGACY_PASS
+
+diff --git a/lib/Frontend/CompilerInvocation.cpp b/lib/Frontend/CompilerInvocation.cpp
+index fedcba098765..123456789abc 100644
+--- a/lib/Frontend/CompilerInvocation.cpp
++++ b/lib/Frontend/CompilerInvocation.cpp
+@@ -1800,6 +1800,23 @@ static bool ParseSILArgs(SILOptions &Opts, ArgList &Args,
+   if (Args.hasArg(OPT_disable_verify_exclusivity))
+     Opts.VerifyExclusivity = false;
+
++  // tSwift Formal Verification Options
++  if (Args.hasArg(OPT_verify_contracts))
++    Opts.VerifyContracts = true;
++
++  if (Args.hasArg(OPT_verify_contracts_strict))
++    Opts.VerifyContractsStrict = true;
++
++  if (Args.hasArg(OPT_verify_all_functions))
++    Opts.VerifyAllFunctions = true;
++
++  if (auto A = Args.getLastArg(OPT_verify_timeout))
++    Opts.VerifyTimeout = std::stoul(A->getValue());
++
++  if (auto A = Args.getLastArg(OPT_verify_report))
++    Opts.VerifyReportPath = A->getValue();
++
+   return false;
+ }
+
+diff --git a/lib/SILOptimizer/CMakeLists.txt b/lib/SILOptimizer/CMakeLists.txt
+index 123456789abc..abcdef000111 100644
+--- a/lib/SILOptimizer/CMakeLists.txt
++++ b/lib/SILOptimizer/CMakeLists.txt
+@@ -18,3 +18,4 @@ add_subdirectory(SemanticARC)
+ add_subdirectory(Transforms)
+ add_subdirectory(UtilityPasses)
+ add_subdirectory(Utils)
++add_subdirectory(Verification)
+
+diff --git a/lib/SILOptimizer/PassManager/PassPipeline.cpp b/lib/SILOptimizer/PassManager/PassPipeline.cpp
+index abcdef000111..999888777666 100644
+--- a/lib/SILOptimizer/PassManager/PassPipeline.cpp
++++ b/lib/SILOptimizer/PassManager/PassPipeline.cpp
+@@ -70,6 +70,12 @@ static llvm::cl::opt<bool> SILPrintFinalModule(
+     "sil-print-final-module", llvm::cl::init(false),
+     llvm::cl::desc("Enable printing the module after all SIL passes"));
+
++// tSwift formal verification pipeline option
++static llvm::cl::opt<bool> EnableVerificationPass(
++    "sil-verification-pass", llvm::cl::init(false),
++    llvm::cl::desc("Enable tSwift formal verification pass"));
++
+ //===----------------------------------------------------------------------===//
+ //                          Diagnostic Pass Pipeline
+ //===----------------------------------------------------------------------===//
+@@ -105,6 +111,18 @@ static void addOwnershipModelEliminatorPipeline(SILPassPipelinePlan &P) {
+   P.addOwnershipModelEliminator();
+ }
+
++// tSwift: Add formal verification pass pipeline
++// This runs after mandatory passes but before lowering, when AST is still available
++static void addVerificationPipeline(SILPassPipelinePlan &P, const SILOptions &opts) {
++  if (!opts.VerifyContracts && !EnableVerificationPass)
++    return;
++
++  P.startPipeline("Formal Verification");
++  P.addSILVerification();
++  // Add summary pass after all function verification passes
++  P.addSILVerificationSummary();
++  // Note: The pass outputs to stderr/JSON. If VerifyContractsStrict is set and
++  // verification fails, the pass will request compilation to stop.
++}
++
+ static void addMandatoryDiagnosticOptPipeline(SILPassPipelinePlan &P) {
+   P.startPipeline("Mandatory Diagnostic Passes + Enabling Optimization Passes");
+
+@@ -389,6 +407,10 @@ SILPassPipelinePlan::getDiagnosticPassPipeline(const SILOptions &Options) {
+   // the optimization pipeline.
+   addMandatoryDiagnosticOptPipeline(P);
+
++  // tSwift: Run formal verification after mandatory passes
++  // At this point AST is still accessible for reading @requires/@ensures
++  addVerificationPipeline(P, Options);
++
+   // Now that we've emitted diagnostics, mark the SIL module as being in the
+   // "post-diagnostic" stage. This lets certain analyses/passes assert that they
+   // run at the right time.
+

@@ -1,0 +1,85 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Test SIL file for memory address operations:
+// - ref_element_addr (class field access)
+// - copy_addr (memory copy)
+// - destroy_addr (memory destruction)
+
+class Point {
+  @_hasStorage var x: Int { get set }
+  @_hasStorage var y: Int { get set }
+  init(x: Int, y: Int)
+}
+
+// getPointX extracts x from a Point reference
+@_requires("true")
+@_ensures("true")
+func getPointX(_ p: Point) -> Int
+
+// Function using ref_element_addr to access class field
+sil hidden @$s4test9getPointXySiAA0C0CF : $@convention(thin) (@guaranteed Point) -> Int {
+bb0(%0 : $Point):
+  debug_value %0, let, name "p", argno 1
+  // Access the x field of the Point class
+  %2 = ref_element_addr %0, #Point.x
+  %3 = begin_access [read] [dynamic] %2
+  %4 = load [trivial] %3
+  end_access %3
+  return %4
+} // end sil function '$s4test9getPointXySiAA0C0CF'
+
+// copyPoint performs copy_addr from source to dest
+sil hidden @$s4test9copyPointyyAA0C0C_ADztF : $@convention(thin) (@guaranteed Point, @inout Point) -> () {
+bb0(%0 : $Point, %1 : $*Point):
+  debug_value %0, let, name "src", argno 1
+  debug_value_addr %1, var, name "dest", argno 2
+
+  // Use ref_element_addr to get x field addresses
+  %4 = ref_element_addr %0, #Point.x
+  %5 = alloc_stack $Int
+
+  // Copy x value
+  copy_addr %4 to [init] %5 : $*Int
+
+  // Clean up
+  destroy_addr %5 : $*Int
+  dealloc_stack %5
+
+  %result = tuple ()
+  return %result
+} // end sil function '$s4test9copyPointyyAA0C0C_ADztF'
+
+// getPositiveX ensures the result is non-negative
+// This spec should verify since we don't have spec-breaking code
+@_requires("true")
+@_ensures("result >= 0")
+func getPositiveX(_ p: Point) -> Int
+
+sil hidden @$s4test12getPositiveXySiAA5PointCF : $@convention(thin) (@guaranteed Point) -> Int {
+bb0(%0 : $Point):
+  debug_value %0, let, name "p", argno 1
+  // Access x field with immutable hint (read-only access)
+  %2 = ref_element_addr [immutable] %0, #Point.x
+  %3 = load [trivial] %2
+
+  // Return max(x, 0) - if x < 0, return 0
+  %5 = integer_literal $Builtin.Int64, 0
+  %6 = struct_extract %3, #Int._value
+  %7 = builtin "cmp_slt_Int64"(%6, %5) : $Builtin.Int1
+  cond_br %7, bb1, bb2
+
+bb1:
+  %9 = integer_literal $Builtin.Int64, 0
+  %10 = struct $Int (%9)
+  br bb3(%10)
+
+bb2:
+  br bb3(%3)
+
+bb3(%result : $Int):
+  return %result
+} // end sil function '$s4test12getPositiveXySiAA5PointCF'

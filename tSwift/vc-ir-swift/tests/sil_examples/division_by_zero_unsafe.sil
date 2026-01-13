@@ -1,0 +1,22 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Minimal SIL capturing division-by-zero detection:
+// - sdiv_Int64 builtin for signed division
+// - No precondition on divisor, so verification should FAIL
+//
+// This file is used by integration tests for `tswift-verify --sil`.
+// Simulated source: func divide(_ a: Int, _ b: Int) -> Int { return a / b }
+sil hidden @divide : $@convention(thin) (Int, Int) -> Int {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "a", argno 1, loc "math.swift":3:15, scope 1
+  debug_value %1, let, name "b", argno 2, loc "math.swift":3:25, scope 1
+  %2 = struct_extract %0, #Int._value, loc "math.swift":3:45, scope 1
+  %3 = struct_extract %1, #Int._value, loc "math.swift":3:49, scope 1
+  %4 = builtin "sdiv_Int64"(%2, %3) : $Builtin.Int64, loc "math.swift":3:45, scope 1
+  %5 = struct $Int (%4), loc "math.swift":3:45, scope 1
+  return %5, loc "math.swift":3:37, scope 1
+}

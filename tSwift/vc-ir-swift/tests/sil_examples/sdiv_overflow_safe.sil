@@ -1,0 +1,30 @@
+// SIL test file: Signed division with constrained inputs (safe from overflow)
+// The @_requires precondition constrains inputs so sdiv overflow is impossible.
+// Auto-VC for overflow should PASS because inputs are bounded.
+//
+// Signed division overflow: INT_MIN / -1 overflows because result = INT_MAX + 1
+// Safe when both inputs are positive: overflow case cannot occur
+//
+// This tests that auto-VCs can verify signed division is safe when preconditions
+// eliminate the INT_MIN / -1 case.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe signed division: inputs constrained to prevent overflow and div-by-zero
+// When a >= 0 and b > 0, neither div-by-zero nor overflow can occur
+@_requires("a >= 0 && b > 0")
+func safeSdiv(_ a: Int, _ b: Int) -> Int
+
+sil hidden @safeSdiv : $@convention(thin) (Int, Int) -> Int {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %4 = struct_extract %0, #Int._value
+  %5 = struct_extract %1, #Int._value
+  %6 = builtin "sdiv_Int64"(%4, %5) : $Builtin.Int64
+  %7 = struct $Int (%6)
+  return %7
+}

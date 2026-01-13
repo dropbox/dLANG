@@ -1,0 +1,21 @@
+[package]
+name = "sorting_example"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+repository.workspace = true
+description = "Example crate for tRust verification"
+readme = "../../README.md"
+keywords = ["verification", "rust", "compiler"]
+categories = ["development-tools", "compilers"]
+
+[package.metadata.trust]
+level = "verified"
+verify_tests = false
+timeout = 60
+
+[dependencies]
+trust_macros = { path = "../../trust_macros" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(trust_verify)"] }

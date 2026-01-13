@@ -1,0 +1,43 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// requiresAtMostTen: requires x <= 10
+// This precondition will be verified as a CallPrecondition VC at call sites.
+@_requires("x <= 10")
+func requiresAtMostTen(_ x: Int) -> Int
+
+// callWithMod: calls requiresAtMostTen(a % 10), precondition a % 10 <= 10
+// This tests MODULO ARGUMENT EXPRESSION substitution in precondition obligations.
+//
+// Analysis:
+// - Callee precondition: x <= 10
+// - Call: requiresAtMostTen(a % 10) where a % 10 is computed via SIL builtin srem
+// - Substituted obligation: (a % 10) <= 10
+// - Caller precondition: a % 10 <= 10
+// - With hypothesis a % 10 <= 10, the call obligation is identical (QED)
+@_requires("a % 10 <= 10")
+func callWithMod(_ a: Int) -> Int
+
+// requiresAtMostTen implementation - identity function
+sil hidden @$s17requires_mod_args17requiresAtMostTenyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  return %0
+} // end sil function '$s17requires_mod_args17requiresAtMostTenyS2iF'
+
+// callWithMod implementation - computes a % 10, then calls requiresAtMostTen(a % 10)
+sil hidden @$s17requires_mod_args11callWithModyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "a", argno 1
+  // Compute a % 10
+  %2 = struct_extract %0, #Int._value      // a._value
+  %3 = integer_literal $Builtin.Int64, 10
+  %4 = builtin "srem_Int64"(%2, %3) : $Builtin.Int64
+  %5 = struct $Int (%4)                     // wrap as Int
+  // Call requiresAtMostTen(a % 10)
+  %6 = function_ref @$s17requires_mod_args17requiresAtMostTenyS2iF : $@convention(thin) (Int) -> Int
+  %7 = apply %6(%5) : $@convention(thin) (Int) -> Int
+  return %7
+} // end sil function '$s17requires_mod_args11callWithModyS2iF'

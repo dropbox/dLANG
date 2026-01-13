@@ -1,0 +1,12 @@
+[package]
+name = "mly-runtime"
+version.workspace = true
+edition.workspace = true
+description = "Adaptive runtime for Tensor Forge"
+
+[dependencies]
+mly-core = { workspace = true }
+mly-metal = { workspace = true }
+mly-ane = { workspace = true }
+mly-cpu = { workspace = true }
+thiserror = { workspace = true }

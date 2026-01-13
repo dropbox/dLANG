@@ -1,0 +1,47 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// atLeast: identity function, postcondition promises result >= x (trivially true)
+// This postcondition will be ASSUMED by callers after the call returns.
+@_ensures("result >= x")
+func atLeast(_ x: Int) -> Int
+
+// callWithSum: calls atLeast(a + b), postcondition promises result >= a + b
+// This tests MULTI-PARAMETER ARGUMENT EXPRESSION substitution in postcondition assumptions.
+//
+// Analysis:
+// - Callee postcondition: result >= x
+// - Call: atLeast(a + b) where (a + b) is computed via SIL builtins
+// - Substituted assumption: call_result >= (a + b)
+// - Caller returns call_result, so result == call_result
+// - Postcondition to prove: result >= a + b
+// - With assumption call_result >= a + b and result == call_result => result >= a + b (QED)
+@_ensures("result >= a + b")
+func callWithSum(_ a: Int, _ b: Int) -> Int
+
+// atLeast implementation - identity function (returns x)
+sil hidden @$s18ensures_nested_args7atLeastyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  return %0
+} // end sil function '$s18ensures_nested_args7atLeastyS2iF'
+
+// callWithSum implementation - computes a + b, then calls atLeast(a + b)
+sil hidden @$s18ensures_nested_args11callWithSumySiSi_SitF : $@convention(thin) (Int, Int) -> Int {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  // Compute a + b
+  %4 = struct_extract %0, #Int._value      // a._value
+  %5 = struct_extract %1, #Int._value      // b._value
+  %6 = integer_literal $Builtin.Int1, 0
+  %7 = builtin "sadd_with_overflow_Int64"(%4, %5, %6) : $(Builtin.Int64, Builtin.Int1)
+  %8 = tuple_extract %7, 0                  // raw result = a + b
+  %9 = struct $Int (%8)                     // wrap as Int
+  // Call atLeast(a + b)
+  %10 = function_ref @$s18ensures_nested_args7atLeastyS2iF : $@convention(thin) (Int) -> Int
+  %11 = apply %10(%9) : $@convention(thin) (Int) -> Int
+  return %11
+} // end sil function '$s18ensures_nested_args11callWithSumySiSi_SitF'

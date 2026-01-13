@@ -1,0 +1,29 @@
+// SIL test file: Unsigned addition with constrained inputs (safe from overflow)
+// The @_requires precondition constrains inputs so overflow is impossible.
+// Auto-VC for overflow should PASS because inputs are bounded.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe unsigned add: inputs constrained to prevent overflow
+// When a and b are both in [0, 1_000_000_000], sum is at most 2_000_000_000
+// which is well within UInt64 range (max ~18.4 quintillion)
+@_requires("a >= 0 && a <= 1000000000 && b >= 0 && b <= 1000000000")
+func safeUAdd(_ a: UInt, _ b: UInt) -> UInt
+
+sil hidden @safeUAdd : $@convention(thin) (UInt, UInt) -> UInt {
+bb0(%0 : $UInt, %1 : $UInt):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %4 = struct_extract %0, #UInt._value
+  %5 = struct_extract %1, #UInt._value
+  %6 = integer_literal $Builtin.Int1, -1
+  %7 = builtin "uadd_with_overflow_Int64"(%4, %5, %6) : $(Builtin.Int64, Builtin.Int1)
+  %8 = tuple_extract %7, 0
+  %9 = tuple_extract %7, 1
+  cond_fail %9, "arithmetic overflow"
+  %11 = struct $UInt (%8)
+  return %11
+}

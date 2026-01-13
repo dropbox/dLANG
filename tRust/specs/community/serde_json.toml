@@ -1,0 +1,178 @@
+# Specifications for the serde_json crate
+# https://crates.io/crates/serde_json
+
+[crate]
+name = "serde_json"
+version = "1.0"
+trust_level = "audited"
+
+# from_str - parse JSON from string
+[[function]]
+name = "serde_json::from_str"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false
+
+# from_slice - parse JSON from bytes
+[[function]]
+name = "serde_json::from_slice"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false
+
+# from_reader - parse JSON from reader
+[[function]]
+name = "serde_json::from_reader"
+preconditions = []
+postconditions = []
+effects = ["IO", "Alloc"]
+pure = false
+
+# to_string - serialize to JSON string
+[[function]]
+name = "serde_json::to_string"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false
+
+# to_string_pretty - serialize to pretty JSON string
+[[function]]
+name = "serde_json::to_string_pretty"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false
+
+# to_vec - serialize to JSON bytes
+[[function]]
+name = "serde_json::to_vec"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false
+
+# to_vec_pretty - serialize to pretty JSON bytes
+[[function]]
+name = "serde_json::to_vec_pretty"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false
+
+# to_writer - serialize to writer
+[[function]]
+name = "serde_json::to_writer"
+preconditions = []
+postconditions = []
+effects = ["IO"]
+pure = false
+
+# to_writer_pretty - serialize to writer with pretty printing
+[[function]]
+name = "serde_json::to_writer_pretty"
+preconditions = []
+postconditions = []
+effects = ["IO"]
+pure = false
+
+# Value::is_null - check if value is null
+[[method]]
+name = "serde_json::Value::is_null"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::is_boolean - check if value is boolean
+[[method]]
+name = "serde_json::Value::is_boolean"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::is_number - check if value is number
+[[method]]
+name = "serde_json::Value::is_number"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::is_string - check if value is string
+[[method]]
+name = "serde_json::Value::is_string"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::is_array - check if value is array
+[[method]]
+name = "serde_json::Value::is_array"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::is_object - check if value is object
+[[method]]
+name = "serde_json::Value::is_object"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::as_bool - get boolean value
+[[method]]
+name = "serde_json::Value::as_bool"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::as_i64 - get i64 value
+[[method]]
+name = "serde_json::Value::as_i64"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::as_u64 - get u64 value
+[[method]]
+name = "serde_json::Value::as_u64"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::as_f64 - get f64 value
+[[method]]
+name = "serde_json::Value::as_f64"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::as_str - get string reference
+[[method]]
+name = "serde_json::Value::as_str"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::as_array - get array reference
+[[method]]
+name = "serde_json::Value::as_array"
+preconditions = []
+postconditions = []
+pure = true
+
+# Value::as_object - get object reference
+[[method]]
+name = "serde_json::Value::as_object"
+preconditions = []
+postconditions = []
+pure = true
+
+# json! macro creates Value
+[[function]]
+name = "serde_json::json"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false

@@ -1,0 +1,8 @@
+{
+  "input_dim": 2,
+  "layers": [
+    {"type": "Linear", "weights": [[0.5, 0.5], [0.3, 0.7]], "bias": [0.0, 0.0]},
+    {"type": "ReLU"},
+    {"type": "Linear", "weights": [[0.4, 0.6]], "bias": [0.0]}
+  ]
+}

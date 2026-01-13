@@ -1,0 +1,180 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Test file for function conversion and lifetime instructions
+
+class Container {
+  @_hasStorage var data: Int { get set }
+  @objc deinit
+  init()
+}
+
+// Test function: Uses thin_to_thick_function conversion
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testThinToThick() -> Int
+
+sil hidden @$s25func_conversion_lifetime15testThinToThickSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Get function reference (thin)
+  %0 = function_ref @helperFunc : $@convention(thin) () -> Int
+
+  // Convert thin to thick (no captures) using simple type names
+  %1 = thin_to_thick_function %0 : $ThinIntFunc to $IntClosure
+
+  // Return constant (avoiding apply to simplify test)
+  %2 = integer_literal $Builtin.Int64, 42
+  %3 = struct $Int (%2)
+  return %3 : $Int
+}
+
+// Test function: Uses convert_function for type adjustment
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testConvertFunction() -> Int
+
+sil hidden @$s25func_conversion_lifetime19testConvertFunctionSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Get function reference
+  %0 = function_ref @helperFunc : $@convention(thin) () -> Int
+
+  // Convert function type (simpler example with simple type names)
+  %1 = convert_function %0 : $ThinIntFunc to $IntClosure
+
+  // Return constant
+  %2 = integer_literal $Builtin.Int64, 10
+  %3 = struct $Int (%2)
+  return %3 : $Int
+}
+
+// Test function: Uses convert_escape_to_noescape
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testEscapeToNoEscape() -> Int
+
+sil hidden @$s25func_conversion_lifetime20testEscapeToNoEscapeSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Get function reference
+  %0 = function_ref @helperFunc : $@convention(thin) () -> Int
+
+  // Convert to thick
+  %1 = thin_to_thick_function %0 : $ThinIntFunc to $IntClosure
+
+  // Convert escaping closure to non-escaping (using simple type annotation)
+  %2 = convert_escape_to_noescape %1 : $IntClosure to $NoEscapeIntClosure
+
+  // Return constant (apply would require more complex setup)
+  %3 = integer_literal $Builtin.Int64, 30
+  %4 = struct $Int (%3)
+  return %4 : $Int
+}
+
+// Test function: Uses convert_escape_to_noescape with [not_guaranteed]
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testEscapeToNoEscapeNotGuaranteed() -> Int
+
+sil hidden @$s25func_conversion_lifetime33testEscapeToNoEscapeNotGuaranteedSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Get function reference
+  %0 = function_ref @helperFunc : $@convention(thin) () -> Int
+
+  // Convert to thick
+  %1 = thin_to_thick_function %0 : $ThinIntFunc to $IntClosure
+
+  // Convert with not_guaranteed flag (lifetime not extended)
+  %2 = convert_escape_to_noescape [not_guaranteed] %1 : $IntClosure to $NoEscapeIntClosure
+
+  // Return constant
+  %3 = integer_literal $Builtin.Int64, 20
+  %4 = struct $Int (%3)
+  return %4 : $Int
+}
+
+// Test function: Uses fix_lifetime
+// @_requires: x >= 0
+// @_ensures: result >= 0
+@_requires("x >= 0")
+@_ensures("result >= 0")
+func testFixLifetime(x: Int) -> Int
+
+sil hidden @$s25func_conversion_lifetime15testFixLifetimeySiSiF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  // Allocate container
+  %1 = alloc_ref $Container
+
+  // Fix lifetime of container - prevents optimizer from moving dealloc before use
+  fix_lifetime %1 : $Container
+
+  // Use container data
+  %3 = ref_element_addr %1 : $Container, #Container.data
+  store %0 to %3 : $*Int
+
+  // Load back
+  %5 = load %3 : $*Int
+
+  // Another fix_lifetime before dealloc
+  fix_lifetime %1 : $Container
+
+  // Deallocate
+  dealloc_ref %1 : $Container
+
+  return %5 : $Int
+}
+
+// Test function: Uses is_unique for COW check
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testIsUnique() -> Int
+
+sil hidden @$s25func_conversion_lifetime12testIsUniqueSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate container
+  %0 = alloc_ref $Container
+
+  // Get address for is_unique check
+  %1 = alloc_stack $Container
+  store %0 to %1 : $*Container
+
+  // Check if reference is unique (COW optimization)
+  %3 = is_unique %1 : $*Container
+
+  // Clean up
+  %4 = load %1 : $*Container
+  dealloc_stack %1 : $*Container
+  dealloc_ref %0 : $Container
+
+  // Return constant (simplified - original would branch on %3)
+  %7 = integer_literal $Builtin.Int64, 1
+  %8 = struct $Int (%7)
+  return %8 : $Int
+}
+
+// Helper function
+sil hidden @helperFunc : $@convention(thin) () -> Int {
+bb0:
+  %0 = integer_literal $Builtin.Int64, 42
+  %1 = struct $Int (%0)
+  return %1 : $Int
+}
+
+// VTable
+sil_vtable Container {
+  #Container.data!getter: (Container) -> () -> Int : @$s25func_conversion_lifetime9ContainerC4dataSivg
+  #Container.data!setter: (Container) -> (Int) -> () : @$s25func_conversion_lifetime9ContainerC4dataSivs
+  #Container.init!allocator: (Container.Type) -> () -> Container : @$s25func_conversion_lifetime9ContainerCACycfC
+  #Container.deinit!deallocator: @$s25func_conversion_lifetime9ContainerCfD
+}

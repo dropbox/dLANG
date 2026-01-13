@@ -1,0 +1,111 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Test SIL file exercising variadic generics (pack) and async continuation instructions
+// Note: Functions with generic pack parameters (<each T>) not yet supported by parser.
+// This tests the instruction parsing with concrete pack types.
+
+// Test pack length - static pack type
+sil @test_pack_length : $@convention(thin) () -> Builtin.Word {
+bb0:
+  // Get the length of a pack type
+  %0 = pack_length $Pack{Int, Float, String}
+  return %0 : $Builtin.Word
+}
+
+// Test scalar pack index - static index
+sil @test_scalar_pack_index : $@convention(thin) () -> () {
+bb0:
+  // Create a scalar (compile-time) pack index
+  %index = scalar_pack_index 0 of $Pack{Int, Float}
+  %ret = tuple ()
+  return %ret : $()
+}
+
+// Test alloc_pack and dealloc_pack with concrete pack type
+sil @test_pack_alloc_dealloc : $@convention(thin) () -> () {
+bb0:
+  // Allocate pack storage
+  %pack1 = alloc_pack $Pack{Int, String}
+
+  // Deallocate pack storage
+  dealloc_pack %pack1 : $*Pack{Int, String}
+
+  %ret = tuple ()
+  return %ret : $()
+}
+
+// Test async continuation (non-throwing)
+sil @test_async_continuation : $@async () -> () {
+entry:
+  // Get a non-throwing async continuation
+  %c = get_async_continuation Builtin.Int32
+  %f = function_ref @helper_func : $@convention(thin) () -> ()
+  apply %f() : $@convention(thin) () -> ()
+  // Await the continuation
+  await_async_continuation %c : $Builtin.RawUnsafeContinuation, resume bb1
+
+bb1(%r : $Builtin.Int32):
+  return undef : $()
+}
+
+// Test async continuation with throws
+sil @test_async_continuation_throws : $@async () -> () {
+entry:
+  // Get a throwing async continuation
+  %c = get_async_continuation [throws] Builtin.Int32
+  %f = function_ref @helper_func : $@convention(thin) () -> ()
+  apply %f() : $@convention(thin) () -> ()
+  // Await with error handling
+  await_async_continuation %c : $Builtin.RawUnsafeContinuation, resume bb1, error bb2
+
+bb1(%r : $Builtin.Int32):
+  br bb3
+
+bb2(%e : $Error):
+  br bb3
+
+bb3:
+  return undef : $()
+}
+
+// Test async continuation with address for result
+sil @test_async_continuation_addr : $@async () -> () {
+entry:
+  %a = alloc_stack $Builtin.Int32
+  // Get async continuation with address for result
+  %c = get_async_continuation_addr Builtin.Int32, %a : $*Builtin.Int32
+  %f = function_ref @helper_func : $@convention(thin) () -> ()
+  apply %f() : $@convention(thin) () -> ()
+  await_async_continuation %c : $Builtin.RawUnsafeContinuation, resume bb1
+
+bb1:
+  dealloc_stack %a : $*Builtin.Int32
+  return undef : $()
+}
+
+// Test async continuation addr with throws
+sil @test_async_continuation_addr_throws : $@async () -> () {
+entry:
+  %a = alloc_stack $Builtin.Int32
+  %c = get_async_continuation_addr [throws] Builtin.Int32, %a : $*Builtin.Int32
+  %f = function_ref @helper_func : $@convention(thin) () -> ()
+  apply %f() : $@convention(thin) () -> ()
+  await_async_continuation %c : $Builtin.RawUnsafeContinuation, resume bb1, error bb2
+
+bb1:
+  dealloc_stack %a : $*Builtin.Int32
+  br bb3
+
+bb2(%e : $Error):
+  dealloc_stack %a : $*Builtin.Int32
+  br bb3
+
+bb3:
+  return undef : $()
+}
+
+// Helper function (external declaration)
+sil @helper_func : $@convention(thin) () -> ()

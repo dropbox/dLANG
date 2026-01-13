@@ -1,0 +1,82 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Banking example: tests multiple verification features together
+// - Overflow checking on balance operations
+// - Preconditions (sufficient balance for withdrawal)
+// - Postconditions with old() (balance changes by exact amount)
+// - Cross-function calls
+
+// deposit: adds amount to balance
+// Precondition: amount > 0 (positive deposits only)
+// Postcondition: result == old(balance) + amount
+@_requires("amount > 0")
+@_ensures("result == old(balance) + amount")
+func deposit(_ balance: Int, _ amount: Int) -> Int
+
+// withdraw: subtracts amount from balance
+// Precondition: amount > 0 and balance >= amount (sufficient funds)
+// Postcondition: result == old(balance) - amount
+@_requires("amount > 0")
+@_requires("balance >= amount")
+@_ensures("result == old(balance) - amount")
+func withdraw(_ balance: Int, _ amount: Int) -> Int
+
+// transfer: moves amount from one account to another
+// Precondition: amount > 0 and fromBalance >= amount
+// Postcondition: result of withdrawal is non-negative
+@_requires("amount > 0")
+@_requires("fromBalance >= amount")
+func transfer(_ fromBalance: Int, _ toBalance: Int, _ amount: Int) -> (Int, Int)
+
+// deposit implementation
+sil hidden @$s7banking7depositySi_SitF : $@convention(thin) (Int, Int) -> Int {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "balance", argno 1
+  debug_value %1, let, name "amount", argno 2
+  %4 = struct_extract %0, #Int._value
+  %5 = struct_extract %1, #Int._value
+  %6 = integer_literal $Builtin.Int1, -1
+  %7 = builtin "sadd_with_overflow_Int64"(%4, %5, %6) : $(Builtin.Int64, Builtin.Int1)
+  %8 = tuple_extract %7, 0
+  %9 = tuple_extract %7, 1
+  cond_fail %9, "arithmetic overflow"
+  %11 = struct $Int (%8)
+  return %11
+} // end sil function '$s7banking7depositySi_SitF'
+
+// withdraw implementation
+sil hidden @$s7banking8withdrawySi_SitF : $@convention(thin) (Int, Int) -> Int {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "balance", argno 1
+  debug_value %1, let, name "amount", argno 2
+  %4 = struct_extract %0, #Int._value
+  %5 = struct_extract %1, #Int._value
+  %6 = integer_literal $Builtin.Int1, -1
+  %7 = builtin "ssub_with_overflow_Int64"(%4, %5, %6) : $(Builtin.Int64, Builtin.Int1)
+  %8 = tuple_extract %7, 0
+  %9 = tuple_extract %7, 1
+  cond_fail %9, "arithmetic overflow"
+  %11 = struct $Int (%8)
+  return %11
+} // end sil function '$s7banking8withdrawySi_SitF'
+
+// transfer implementation - calls withdraw then deposit
+sil hidden @$s7banking8transferySi_Si_SitSi_SitF : $@convention(thin) (Int, Int, Int) -> (Int, Int) {
+bb0(%0 : $Int, %1 : $Int, %2 : $Int):
+  debug_value %0, let, name "fromBalance", argno 1
+  debug_value %1, let, name "toBalance", argno 2
+  debug_value %2, let, name "amount", argno 3
+  // Call withdraw(fromBalance, amount)
+  %6 = function_ref @$s7banking8withdrawySi_SitF : $@convention(thin) (Int, Int) -> Int
+  %7 = apply %6(%0, %2) : $@convention(thin) (Int, Int) -> Int
+  // Call deposit(toBalance, amount)
+  %8 = function_ref @$s7banking7depositySi_SitF : $@convention(thin) (Int, Int) -> Int
+  %9 = apply %8(%1, %2) : $@convention(thin) (Int, Int) -> Int
+  // Return (newFromBalance, newToBalance)
+  %10 = tuple (%7, %9)
+  return %10
+} // end sil function '$s7banking8transferySi_Si_SitSi_SitF'

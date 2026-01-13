@@ -1,0 +1,36 @@
+// SIL test file: SwiftUI ForEach with safe index bounds
+// Pattern: ForEach(0..<items.count) { index in items[index] }
+// Auto-VC for bounds check should PASS because index is within range.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe ForEach index access - with precondition
+// @_requires("index >= 0 && index < len")
+@_requires("index >= 0 && index < len")
+func swiftui_foreach_safe_access(_ index: Int, _ len: Int, _ base: Builtin.RawPointer) -> Int
+
+sil hidden @swiftui_foreach_safe_access : $@convention(thin) (Int, Int, Builtin.RawPointer) -> Int {
+bb0(%0 : $Int, %1 : $Int, %2 : $Builtin.RawPointer):
+  debug_value %0, let, name "index", argno 1
+  debug_value %1, let, name "len", argno 2
+  debug_value %2, let, name "base", argno 3
+  // Precondition: 0 <= index < len (established by ForEach range)
+  %6 = struct_extract %0, #Int._value
+  %7 = struct_extract %1, #Int._value
+  %8 = integer_literal $Builtin.Int64, 0
+  %true = integer_literal $Builtin.Int1, -1
+  // Check negative: index < 0
+  %neg = builtin "cmp_slt_Int64"(%6, %8) : $Builtin.Int1
+  cond_fail %neg, "Index out of range"
+  // Check upper bound: index >= len (i.e., NOT(index < len))
+  %in = builtin "cmp_slt_Int64"(%6, %7) : $Builtin.Int1
+  %oob = builtin "xor_Int1"(%in, %true) : $Builtin.Int1
+  cond_fail %oob, "Index out of range"
+  // Safe path: access array element (simplified - return constant)
+  %r = integer_literal $Builtin.Int64, 42
+  %ret = struct $Int (%r)
+  return %ret : $Int
+}

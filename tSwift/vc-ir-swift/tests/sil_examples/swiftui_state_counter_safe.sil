@@ -1,0 +1,48 @@
+// SIL test file: SwiftUI @State counter increment with overflow protection
+// Pattern: Button { counter += 1 } where counter is checked against MAX first
+// Auto-VC for overflow should PASS because the path condition guards the increment.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe counter increment: guarded by less-than-MAX check
+// When counter < MAX, counter + 1 cannot overflow
+sil hidden @swiftui_state_counter_increment : $@convention(thin) (@guaranteed CounterState) -> () {
+bb0(%0 : $CounterState):
+  debug_value %0, let, name "state", argno 1
+  // %2 = state.count getter
+  %2 = class_method %0, #CounterState.count!getter : (CounterState) -> () -> Int, $@convention(method) (@guaranteed CounterState) -> Int
+  %3 = apply %2(%0) : $@convention(method) (@guaranteed CounterState) -> Int
+  // Check: counter < INT64_MAX
+  %4 = integer_literal $Builtin.Int64, 9223372036854775807
+  %5 = struct_extract %3, #Int._value
+  %6 = builtin "cmp_slt_Int64"(%5, %4) : $Builtin.Int1
+  cond_br %6, bb1, bb2
+
+bb1:
+  // Safe to increment: counter < MAX
+  %8 = integer_literal $Builtin.Int64, 1
+  %9 = class_method %0, #CounterState.count!modify : (CounterState) -> () -> (), $@yield_once @convention(method) (@guaranteed CounterState) -> @yields @inout Int
+  (%10, %11) = begin_apply %9(%0) : $@yield_once @convention(method) (@guaranteed CounterState) -> @yields @inout Int
+  %12 = struct_element_addr %10, #Int._value
+  %13 = load %12 : $*Builtin.Int64
+  %14 = integer_literal $Builtin.Int1, -1
+  %15 = builtin "sadd_with_overflow_Int64"(%13, %8, %14) : $(Builtin.Int64, Builtin.Int1)
+  %16 = tuple_extract %15, 0
+  %17 = tuple_extract %15, 1
+  cond_fail %17, "arithmetic overflow"
+  %19 = struct $Int (%16)
+  store %19 to %10 : $*Int
+  %21 = end_apply %11 as $()
+  br bb3
+
+bb2:
+  // counter >= MAX, don't increment
+  br bb3
+
+bb3:
+  %24 = tuple ()
+  return %24 : $()
+}

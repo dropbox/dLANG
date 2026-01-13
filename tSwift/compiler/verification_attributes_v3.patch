@@ -1,0 +1,558 @@
+diff --git a/include/swift/AST/Attr.h b/include/swift/AST/Attr.h
+index 5bf834c7b0a..705c40b8429 100644
+--- a/include/swift/AST/Attr.h
++++ b/include/swift/AST/Attr.h
+@@ -804,6 +804,101 @@ public:
+   }
+ };
+ 
++// ============================================================================
++// tSwift Verification Attributes
++// ============================================================================
++
++/// Attribute for specifying function preconditions: @_requires("x > 0")
++class RequiresAttr : public DeclAttribute {
++public:
++  RequiresAttr(StringRef Condition, SourceLoc AtLoc, SourceRange Range,
++               bool Implicit)
++      : DeclAttribute(DeclAttrKind::Requires, AtLoc, Range, Implicit),
++        Condition(Condition) {}
++
++  RequiresAttr(StringRef Condition, bool Implicit)
++      : RequiresAttr(Condition, SourceLoc(), SourceRange(), Implicit) {}
++
++  /// The verification condition string.
++  const StringRef Condition;
++
++  StringRef getCondition() const { return Condition; }
++
++  static bool classof(const DeclAttribute *DA) {
++    return DA->getKind() == DeclAttrKind::Requires;
++  }
++
++  RequiresAttr *clone(ASTContext &ctx) const {
++    return new (ctx) RequiresAttr(Condition, AtLoc, Range, isImplicit());
++  }
++
++  bool isEquivalent(const RequiresAttr *other, Decl *attachedTo) const {
++    return Condition == other->Condition;
++  }
++};
++
++/// Attribute for specifying function postconditions: @_ensures("result > 0")
++class EnsuresAttr : public DeclAttribute {
++public:
++  EnsuresAttr(StringRef Condition, SourceLoc AtLoc, SourceRange Range,
++              bool Implicit)
++      : DeclAttribute(DeclAttrKind::Ensures, AtLoc, Range, Implicit),
++        Condition(Condition) {}
++
++  EnsuresAttr(StringRef Condition, bool Implicit)
++      : EnsuresAttr(Condition, SourceLoc(), SourceRange(), Implicit) {}
++
++  /// The verification condition string.
++  const StringRef Condition;
++
++  StringRef getCondition() const { return Condition; }
++
++  static bool classof(const DeclAttribute *DA) {
++    return DA->getKind() == DeclAttrKind::Ensures;
++  }
++
++  EnsuresAttr *clone(ASTContext &ctx) const {
++    return new (ctx) EnsuresAttr(Condition, AtLoc, Range, isImplicit());
++  }
++
++  bool isEquivalent(const EnsuresAttr *other, Decl *attachedTo) const {
++    return Condition == other->Condition;
++  }
++};
++
++/// Attribute for specifying type invariants: @_invariant("value >= 0")
++class InvariantAttr : public DeclAttribute {
++public:
++  InvariantAttr(StringRef Condition, SourceLoc AtLoc, SourceRange Range,
++                bool Implicit)
++      : DeclAttribute(DeclAttrKind::Invariant, AtLoc, Range, Implicit),
++        Condition(Condition) {}
++
++  InvariantAttr(StringRef Condition, bool Implicit)
++      : InvariantAttr(Condition, SourceLoc(), SourceRange(), Implicit) {}
++
++  /// The verification condition string.
++  const StringRef Condition;
++
++  StringRef getCondition() const { return Condition; }
++
++  static bool classof(const DeclAttribute *DA) {
++    return DA->getKind() == DeclAttrKind::Invariant;
++  }
++
++  InvariantAttr *clone(ASTContext &ctx) const {
++    return new (ctx) InvariantAttr(Condition, AtLoc, Range, isImplicit());
++  }
++
++  bool isEquivalent(const InvariantAttr *other, Decl *attachedTo) const {
++    return Condition == other->Condition;
++  }
++};
++
++// Note: @_trusted uses SIMPLE_DECL_ATTR which auto-generates TrustedAttr typedef
++
++// ============================================================================
++
+ /// Defines the @_alignment attribute.
+ class AlignmentAttr : public DeclAttribute {
+ public:
+diff --git a/include/swift/AST/DeclAttr.def b/include/swift/AST/DeclAttr.def
+index 408374a4509..20267ebea76 100644
+--- a/include/swift/AST/DeclAttr.def
++++ b/include/swift/AST/DeclAttr.def
+@@ -916,7 +916,32 @@ DECL_ATTR(warn, Warn,
+   AllowMultipleAttributes | ABIStableToAdd | ABIStableToRemove | APIStableToAdd | APIStableToRemove | ForbiddenInABIAttr,
+   174)
+ 
+-LAST_DECL_ATTR(Warn)
++// tSwift Verification Attributes (codes 175-178)
++// @_requires("condition") - function precondition
++DECL_ATTR(_requires, Requires,
++  OnFunc | OnConstructor | OnSubscript | OnAccessor,
++  AllowMultipleAttributes | LongAttribute | ABIStableToAdd | ABIStableToRemove | APIStableToAdd | APIStableToRemove | ForbiddenInABIAttr,
++  175)
++
++// @_ensures("condition") - function postcondition
++DECL_ATTR(_ensures, Ensures,
++  OnFunc | OnConstructor | OnSubscript | OnAccessor,
++  AllowMultipleAttributes | LongAttribute | ABIStableToAdd | ABIStableToRemove | APIStableToAdd | APIStableToRemove | ForbiddenInABIAttr,
++  176)
++
++// @_invariant("condition") - type invariant
++DECL_ATTR(_invariant, Invariant,
++  OnVar | OnClass | OnStruct | OnEnum,
++  AllowMultipleAttributes | LongAttribute | ABIStableToAdd | ABIStableToRemove | APIStableToAdd | APIStableToRemove | ForbiddenInABIAttr,
++  177)
++
++// @_trusted - skip verification for this declaration
++SIMPLE_DECL_ATTR(_trusted, Trusted,
++  OnFunc | OnConstructor | OnSubscript | OnAccessor | OnVar | OnClass | OnStruct | OnEnum,
++  ABIStableToAdd | ABIStableToRemove | APIStableToAdd | APIStableToRemove | ForbiddenInABIAttr,
++  178)
++
++LAST_DECL_ATTR(Trusted)
+ 
+ #undef DECL_ATTR_ALIAS
+ #undef CONTEXTUAL_DECL_ATTR_ALIAS
+diff --git a/include/swift/AST/SILOptions.h b/include/swift/AST/SILOptions.h
+index 46132b8483d..fa6b4153d46 100644
+--- a/include/swift/AST/SILOptions.h
++++ b/include/swift/AST/SILOptions.h
+@@ -149,6 +149,9 @@ public:
+   /// Enables SIL-level diagnostics for NonescapableTypes.
+   bool EnableLifetimeDependenceDiagnostics = true;
+ 
++  /// Enable formal verification of @_requires/@_ensures specifications.
++  bool EnableFormalVerification = false;
++
+   /// Enable diagnostics requiring WMO (for @noLocks, @noAllocation
+   /// annotations, Embedded Swift, and class specialization). SourceKit is the
+   /// only consumer that has this disabled today (as it disables WMO
+diff --git a/include/swift/Option/FrontendOptions.td b/include/swift/Option/FrontendOptions.td
+index c23281466a2..96200bc6deb 100644
+--- a/include/swift/Option/FrontendOptions.td
++++ b/include/swift/Option/FrontendOptions.td
+@@ -591,6 +591,9 @@ def enable_spec_devirt : Flag<["-"], "enable-spec-devirt">,
+ def enable_async_demotion : Flag<["-"], "enable-experimental-async-demotion">,
+   HelpText<"Enables an optimization pass to demote async functions.">;
+ 
++def enable_formal_verification : Flag<["-"], "enable-formal-verification">,
++  HelpText<"Enable formal verification of @_requires/@_ensures specifications.">;
++
+ def enable_throws_prediction : Flag<["-"], "enable-throws-prediction">,
+   HelpText<"Enables optimization assumption that functions rarely throw errors.">;
+ def disable_throws_prediction : Flag<["-"], "disable-throws-prediction">,
+diff --git a/include/swift/SILOptimizer/PassManager/Passes.def b/include/swift/SILOptimizer/PassManager/Passes.def
+index 75c46153e54..d76de9ceb1e 100644
+--- a/include/swift/SILOptimizer/PassManager/Passes.def
++++ b/include/swift/SILOptimizer/PassManager/Passes.def
+@@ -404,6 +404,8 @@ LEGACY_PASS(SILCombine, "sil-combine",
+      "Combine SIL Instructions via Peephole Optimization")
+ LEGACY_PASS(SILDebugInfoGenerator, "sil-debuginfo-gen",
+      "Generate Debug Information with Source Locations into Textual SIL")
++LEGACY_PASS(SILVerification, "sil-verification",
++     "Verification condition generation for formal verification")
+ LEGACY_PASS(EarlySROA, "early-sroa",
+      "Scalar Replacement of Aggregate Stack Objects on high-level SIL")
+ LEGACY_PASS(SROA, "sroa",
+diff --git a/lib/AST/ASTDumper.cpp b/lib/AST/ASTDumper.cpp
+index bef1826bc5c..562f2cb601d 100644
+--- a/lib/AST/ASTDumper.cpp
++++ b/lib/AST/ASTDumper.cpp
+@@ -5140,9 +5140,27 @@ public:
+   TRIVIAL_ATTR_PRINTER(Nonexhaustive, nonexhaustive)
+   TRIVIAL_ATTR_PRINTER(Concurrent, concurrent)
+   TRIVIAL_ATTR_PRINTER(UnsafeSelfDependentResult, unsafe_self_dependent_result)
++  TRIVIAL_ATTR_PRINTER(Trusted, _trusted)
+ 
+ #undef TRIVIAL_ATTR_PRINTER
+ 
++  // Verification attributes
++  void visitRequiresAttr(RequiresAttr *Attr, Label label) {
++    printCommon(Attr, "_requires_attr", label);
++    printFieldQuoted(Attr->getCondition(), Label::always("condition"));
++    printFoot();
++  }
++  void visitEnsuresAttr(EnsuresAttr *Attr, Label label) {
++    printCommon(Attr, "_ensures_attr", label);
++    printFieldQuoted(Attr->getCondition(), Label::always("condition"));
++    printFoot();
++  }
++  void visitInvariantAttr(InvariantAttr *Attr, Label label) {
++    printCommon(Attr, "_invariant_attr", label);
++    printFieldQuoted(Attr->getCondition(), Label::always("condition"));
++    printFoot();
++  }
++
+   void visitABIAttr(ABIAttr *Attr, Label label) {
+     printCommon(Attr, "abi_attr", label);
+     printRec(Attr->abiDecl, Label::always("decl"));
+diff --git a/lib/AST/Attr.cpp b/lib/AST/Attr.cpp
+index d2f113b9cf6..7dc755b8657 100644
+--- a/lib/AST/Attr.cpp
++++ b/lib/AST/Attr.cpp
+@@ -1805,6 +1805,25 @@ bool DeclAttribute::printImpl(ASTPrinter &Printer, const PrintOptions &Options,
+     break;
+   }
+ 
++  // tSwift verification attributes
++  case DeclAttrKind::Requires: {
++    auto *attr = cast<RequiresAttr>(this);
++    Printer << "@_requires(\"" << attr->getCondition() << "\")";
++    break;
++  }
++
++  case DeclAttrKind::Ensures: {
++    auto *attr = cast<EnsuresAttr>(this);
++    Printer << "@_ensures(\"" << attr->getCondition() << "\")";
++    break;
++  }
++
++  case DeclAttrKind::Invariant: {
++    auto *attr = cast<InvariantAttr>(this);
++    Printer << "@_invariant(\"" << attr->getCondition() << "\")";
++    break;
++  }
++
+ #define SIMPLE_DECL_ATTR(X, CLASS, ...) case DeclAttrKind::CLASS:
+ #include "swift/AST/DeclAttr.def"
+     llvm_unreachable("handled above");
+@@ -2055,6 +2074,12 @@ StringRef DeclAttribute::getAttrName() const {
+     return cast<LifetimeAttr>(this)->isUnderscored() ? "_lifetime" : "lifetime";
+   case DeclAttrKind::Nonexhaustive:
+     return "nonexhaustive";
++  case DeclAttrKind::Requires:
++    return "_requires";
++  case DeclAttrKind::Ensures:
++    return "_ensures";
++  case DeclAttrKind::Invariant:
++    return "_invariant";
+   }
+   llvm_unreachable("bad DeclAttrKind");
+ }
+diff --git a/lib/ASTGen/Sources/ASTGen/DeclAttrs.swift b/lib/ASTGen/Sources/ASTGen/DeclAttrs.swift
+index d108a8582bc..4b1036ca996 100644
+--- a/lib/ASTGen/Sources/ASTGen/DeclAttrs.swift
++++ b/lib/ASTGen/Sources/ASTGen/DeclAttrs.swift
+@@ -314,10 +314,16 @@ extension ASTGenVisitor {
+         .Used,
+         .WarnUnqualifiedAccess,
+         .WeakLinked,
+-        .UnsafeSelfDependentResult:
++        .UnsafeSelfDependentResult,
++        .Trusted:
+ 
+         return handle(self.generateSimpleDeclAttr(attribute: node, kind: attrKind!))
+ 
++      // Verification attributes (tSwift)
++      case .Requires, .Ensures, .Invariant:
++        // TODO: Implement verification attribute generation
++        return
++
+       // Modifers.
+       case .AccessControl:
+         // TODO: Diagnose and generateAccessControl().
+diff --git a/lib/ASTGen/Sources/ASTGen/Regex.swift b/lib/ASTGen/Sources/ASTGen/Regex.swift
+index 645bedc0ceb..c4b64f4ade6 100644
+--- a/lib/ASTGen/Sources/ASTGen/Regex.swift
++++ b/lib/ASTGen/Sources/ASTGen/Regex.swift
+@@ -15,8 +15,10 @@ import BasicBridging
+ import SwiftDiagnostics
+ import SwiftSyntax
+ 
+-#if canImport(_CompilerRegexParser)
+-@_spi(CompilerInterface) import _CompilerRegexParser
++// DISABLED: Regex parser module has SPI visibility issues with SDK mismatch
++// #if canImport(_CompilerRegexParser)
++// @_spi(CompilerInterface) import _CompilerRegexParser
++#if false
+ 
+ /// Bridging between C++ lexer and swiftCompilerLexRegexLiteral.
+ ///
+@@ -173,4 +175,54 @@ func getDescriptionForRegexPatternFeature(
+ 
+ #warning("Regex parsing is disabled")
+ 
++// Stub implementations when _CompilerRegexParser is not available
++@_cdecl("swift_ASTGen_lexRegexLiteral")
++public func _RegexLiteralLexingFn(
++  _ curPtrPtr: UnsafeMutablePointer<UnsafePointer<CChar>>,
++  _ bufferEndPtr: UnsafePointer<CChar>,
++  _ mustBeRegex: Bool,
++  _ bridgedDiagnosticEngine: BridgedNullableDiagnosticEngine
++) -> Bool {
++  // Return true (completely erroneous) to indicate regex is not supported
++  return true
++}
++
++@_cdecl("swift_ASTGen_parseRegexLiteral")
++public func _RegexLiteralParsingFn(
++  _ input: BridgedStringRef,
++  _ versionOut: UnsafeMutablePointer<UInt>,
++  _ captureStructureOut: UnsafeMutableRawPointer,
++  _ captureStructureSize: UInt,
++  _ patternFeaturesOut: UnsafeMutablePointer<BridgedRegexLiteralPatternFeatures>,
++  _ baseLoc: SourceLoc,
++  _ bridgedDiagnosticEngine: BridgedDiagnosticEngine
++) -> Bool {
++  // Return true to indicate failure
++  return true
++}
++
++@_cdecl("swift_ASTGen_freeBridgedRegexLiteralPatternFeatures")
++func freeBridgedRegexLiteralPatternFeatures(
++  _ features: BridgedRegexLiteralPatternFeatures
++) {
++  // No-op when regex is disabled
++}
++
++@_cdecl("swift_ASTGen_getSwiftVersionForRegexPatternFeature")
++func getSwiftVersionForRegexPatternFeature(
++  _ featureKind: BridgedRegexLiteralPatternFeatureKind,
++  _ versionOut: UnsafeMutablePointer<BridgedSwiftVersion>
++) {
++  // No-op when regex is disabled
++}
++
++@_cdecl("swift_ASTGen_getDescriptionForRegexPatternFeature")
++func getDescriptionForRegexPatternFeature(
++  _ featureKind: BridgedRegexLiteralPatternFeatureKind,
++  _ context: BridgedASTContext,
++  _ descriptionOut: UnsafeMutablePointer<BridgedStringRef>
++) {
++  // No-op when regex is disabled
++}
++
+ #endif
+diff --git a/lib/Frontend/CompilerInvocation.cpp b/lib/Frontend/CompilerInvocation.cpp
+index e43f6de0df0..6f78d98e093 100644
+--- a/lib/Frontend/CompilerInvocation.cpp
++++ b/lib/Frontend/CompilerInvocation.cpp
+@@ -3155,6 +3155,7 @@ static bool ParseSILArgs(SILOptions &Opts, ArgList &Args,
+   Opts.EnableSILOpaqueValues = Args.hasFlag(
+       OPT_enable_sil_opaque_values, OPT_disable_sil_opaque_values, false);
+   Opts.EnableAsyncDemotion |= Args.hasArg(OPT_enable_async_demotion);
++  Opts.EnableFormalVerification |= Args.hasArg(OPT_enable_formal_verification);
+   Opts.EnableThrowsPrediction = Args.hasFlag(
+       OPT_enable_throws_prediction, OPT_disable_throws_prediction,
+       Opts.EnableThrowsPrediction);
+diff --git a/lib/Parse/ParseDecl.cpp b/lib/Parse/ParseDecl.cpp
+index b54cab95ed9..f34a14c4dfd 100644
+--- a/lib/Parse/ParseDecl.cpp
++++ b/lib/Parse/ParseDecl.cpp
+@@ -3411,6 +3411,59 @@ ParserStatus Parser::parseNewDeclAttribute(DeclAttributes &Attributes,
+                                                  /*Implicit=*/false));
+     break;
+   }
++
++  // tSwift Verification Attributes
++  case DeclAttrKind::Requires:
++  case DeclAttrKind::Ensures:
++  case DeclAttrKind::Invariant: {
++    if (!consumeIfAttributeLParen()) {
++      diagnose(Loc, diag::attr_expected_lparen, AttrName,
++               DeclAttribute::isDeclModifier(DK));
++      return makeParserSuccess();
++    }
++
++    if (Tok.isNot(tok::string_literal)) {
++      diagnose(Loc, diag::attr_expected_string_literal, AttrName);
++      return makeParserSuccess();
++    }
++
++    auto Condition = getStringLiteralIfNotInterpolated(
++        Loc, ("'" + AttrName + "'").str());
++
++    consumeToken(tok::string_literal);
++
++    if (Condition.has_value())
++      AttrRange = SourceRange(Loc, Tok.getRange().getStart());
++    else
++      DiscardAttribute = true;
++
++    if (!consumeIf(tok::r_paren)) {
++      diagnose(Loc, diag::attr_expected_rparen, AttrName,
++               DeclAttribute::isDeclModifier(DK));
++      return makeParserSuccess();
++    }
++
++    if (!DiscardAttribute) {
++      switch (DK) {
++      case DeclAttrKind::Requires:
++        Attributes.add(new (Context) RequiresAttr(Condition.value(), AtLoc,
++                                                   AttrRange, /*Implicit=*/false));
++        break;
++      case DeclAttrKind::Ensures:
++        Attributes.add(new (Context) EnsuresAttr(Condition.value(), AtLoc,
++                                                  AttrRange, /*Implicit=*/false));
++        break;
++      case DeclAttrKind::Invariant:
++        Attributes.add(new (Context) InvariantAttr(Condition.value(), AtLoc,
++                                                    AttrRange, /*Implicit=*/false));
++        break;
++      default:
++        llvm_unreachable("Unhandled verification attribute");
++      }
++    }
++    break;
++  }
++
+   case DeclAttrKind::OriginallyDefinedIn: {
+     auto LeftLoc = Tok.getLoc();
+     if (!consumeIfAttributeLParen()) {
+diff --git a/lib/SILOptimizer/CMakeLists.txt b/lib/SILOptimizer/CMakeLists.txt
+index 1f34ce6e44d..0eb116b3712 100644
+--- a/lib/SILOptimizer/CMakeLists.txt
++++ b/lib/SILOptimizer/CMakeLists.txt
+@@ -17,3 +17,4 @@ add_subdirectory(SemanticARC)
+ add_subdirectory(Transforms)
+ add_subdirectory(UtilityPasses)
+ add_subdirectory(Utils)
++add_subdirectory(Verification)
+diff --git a/lib/SILOptimizer/PassManager/PassPipeline.cpp b/lib/SILOptimizer/PassManager/PassPipeline.cpp
+index 0d6d0de776f..00648ca59af 100644
+--- a/lib/SILOptimizer/PassManager/PassPipeline.cpp
++++ b/lib/SILOptimizer/PassManager/PassPipeline.cpp
+@@ -304,6 +304,13 @@ static void addMandatoryDiagnosticOptPipeline(SILPassPipelinePlan &P) {
+   // It is considered a diagnostics pass because it will diagnose cycles in
+   // inline(always) function calling.
+   P.addInlineAlwaysInlining();
++
++  // Run formal verification if enabled.
++  // This runs at the end of diagnostics while AST is still accessible,
++  // extracting @_requires/@_ensures specs and generating verification conditions.
++  if (P.getOptions().EnableFormalVerification) {
++    P.addSILVerification();
++  }
+ }
+ 
+ SILPassPipelinePlan
+diff --git a/lib/Sema/TypeCheckAttr.cpp b/lib/Sema/TypeCheckAttr.cpp
+index a0ed009f664..da63844f2db 100644
+--- a/lib/Sema/TypeCheckAttr.cpp
++++ b/lib/Sema/TypeCheckAttr.cpp
+@@ -208,6 +208,11 @@ public:
+   IGNORED_ATTR(PreInverseGenerics)
+   IGNORED_ATTR(Safe)
+   IGNORED_ATTR(Warn)
++  // tSwift verification attributes
++  IGNORED_ATTR(Requires)
++  IGNORED_ATTR(Ensures)
++  IGNORED_ATTR(Invariant)
++  IGNORED_ATTR(Trusted)
+ #undef IGNORED_ATTR
+ 
+   void visitABIAttr(ABIAttr *attr) {
+diff --git a/lib/Sema/TypeCheckDeclOverride.cpp b/lib/Sema/TypeCheckDeclOverride.cpp
+index c1172d2695b..93a40a05057 100644
+--- a/lib/Sema/TypeCheckDeclOverride.cpp
++++ b/lib/Sema/TypeCheckDeclOverride.cpp
+@@ -1757,6 +1757,11 @@ namespace  {
+     UNINTERESTING_ATTR(AddressableForDependencies)
+     UNINTERESTING_ATTR(UnsafeSelfDependentResult)
+     UNINTERESTING_ATTR(Warn)
++    // tSwift verification attributes
++    UNINTERESTING_ATTR(Requires)
++    UNINTERESTING_ATTR(Ensures)
++    UNINTERESTING_ATTR(Invariant)
++    UNINTERESTING_ATTR(Trusted)
+ #undef UNINTERESTING_ATTR
+ 
+     void visitABIAttr(ABIAttr *attr) {
+diff --git a/lib/Serialization/ModuleFormat.h b/lib/Serialization/ModuleFormat.h
+index 2a41a0c01f9..de3999d7587 100644
+--- a/lib/Serialization/ModuleFormat.h
++++ b/lib/Serialization/ModuleFormat.h
+@@ -2553,6 +2553,25 @@ namespace decls_block {
+     TypeIDField // type eraser type
+   >;
+ 
++  // tSwift verification attributes
++  using RequiresDeclAttrLayout = BCRecordLayout<
++    Requires_DECL_ATTR,
++    BCFixed<1>, // implicit flag
++    BCBlob      // condition string
++  >;
++
++  using EnsuresDeclAttrLayout = BCRecordLayout<
++    Ensures_DECL_ATTR,
++    BCFixed<1>, // implicit flag
++    BCBlob      // condition string
++  >;
++
++  using InvariantDeclAttrLayout = BCRecordLayout<
++    Invariant_DECL_ATTR,
++    BCFixed<1>, // implicit flag
++    BCBlob      // condition string
++  >;
++
+   using CustomDeclAttrLayout = BCRecordLayout<
+     Custom_DECL_ATTR,
+     BCFixed<1>,  // implicit flag
+diff --git a/lib/Serialization/Serialization.cpp b/lib/Serialization/Serialization.cpp
+index 22af1f5a88a..a93bebe5a83 100644
+--- a/lib/Serialization/Serialization.cpp
++++ b/lib/Serialization/Serialization.cpp
+@@ -2994,6 +2994,34 @@ class Serializer::DeclSerializer : public DeclVisitor<DeclSerializer> {
+       return;
+     }
+ 
++    // tSwift verification attributes
++    case DeclAttrKind::Requires: {
++      auto *theAttr = cast<RequiresAttr>(DA);
++      auto abbrCode = S.DeclTypeAbbrCodes[RequiresDeclAttrLayout::Code];
++      RequiresDeclAttrLayout::emitRecord(S.Out, S.ScratchRecord, abbrCode,
++                                         theAttr->isImplicit(),
++                                         theAttr->getCondition());
++      return;
++    }
++
++    case DeclAttrKind::Ensures: {
++      auto *theAttr = cast<EnsuresAttr>(DA);
++      auto abbrCode = S.DeclTypeAbbrCodes[EnsuresDeclAttrLayout::Code];
++      EnsuresDeclAttrLayout::emitRecord(S.Out, S.ScratchRecord, abbrCode,
++                                        theAttr->isImplicit(),
++                                        theAttr->getCondition());
++      return;
++    }
++
++    case DeclAttrKind::Invariant: {
++      auto *theAttr = cast<InvariantAttr>(DA);
++      auto abbrCode = S.DeclTypeAbbrCodes[InvariantDeclAttrLayout::Code];
++      InvariantDeclAttrLayout::emitRecord(S.Out, S.ScratchRecord, abbrCode,
++                                          theAttr->isImplicit(),
++                                          theAttr->getCondition());
++      return;
++    }
++
+     case DeclAttrKind::Implements: {
+       auto *theAttr = cast<ImplementsAttr>(DA);
+       auto abbrCode = S.DeclTypeAbbrCodes[ImplementsDeclAttrLayout::Code];

@@ -1,0 +1,35 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// canFail: a function that may throw (stub for testing)
+sil hidden @$s8throwing7canFailyS2iKF : $@convention(thin) (Int) -> (Int, @error any Error) {
+bb0(%0 : $Int):
+  return %0 : $Int
+}
+
+// tryOrPositive: incorrectly claims result >= 0
+// On success: returns input (could be negative)
+// On error: returns -1 (negative)
+// This spec should FAIL because result can be negative in both paths
+@_ensures("result >= 0")
+func tryOrPositive(_ x: Int) -> Int
+
+sil hidden @$s8throwing13tryOrPositiveyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  %1 = function_ref @$s8throwing7canFailyS2iKF : $@convention(thin) (Int) -> (Int, @error any Error)
+  try_apply %1(%0) : $@convention(thin) (Int) -> (Int, @error any Error), normal bb1, error bb2
+
+bb1(%2 : $Int):
+  // Success: return the value (could be negative!)
+  return %2 : $Int
+
+bb2(%3 : $any Error):
+  // Error: return -1 (negative, violates postcondition)
+  %4 = integer_literal $Builtin.Int64, -1
+  %5 = struct $Int (%4)
+  return %5 : $Int
+} // end sil function '$s8throwing13tryOrPositiveyS2iF'

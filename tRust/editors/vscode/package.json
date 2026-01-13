@@ -1,0 +1,129 @@
+{
+  "name": "trust-vscode",
+  "displayName": "tRust Verification",
+  "description": "tRust formal verification support for VS Code",
+  "version": "0.1.0",
+  "publisher": "trust",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:rust"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "trust.verify",
+        "title": "tRust: Verify Current File"
+      },
+      {
+        "command": "trust.copySuggestion",
+        "title": "tRust: Copy Suggestion"
+      },
+      {
+        "command": "trust.verifyWorkspace",
+        "title": "tRust: Verify Workspace"
+      },
+      {
+        "command": "trust.clearCache",
+        "title": "tRust: Clear Verification Cache"
+      },
+      {
+        "command": "trust.showCacheStats",
+        "title": "tRust: Show Cache Statistics"
+      },
+      {
+        "command": "trust.explainError",
+        "title": "tRust: Explain Error Code"
+      },
+      {
+        "command": "trust.showFunctionDetails",
+        "title": "tRust: Show Function Verification Details"
+      }
+    ],
+    "configuration": {
+      "title": "tRust Verification",
+      "properties": {
+        "trust.trustcPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the trustc binary (empty = auto-detect)"
+        },
+        "trust.verifyOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically verify files on save"
+        },
+        "trust.verifyOnOpen": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically verify files when opened"
+        },
+        "trust.showInlineStatus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline verification status decorations"
+        },
+        "trust.useGlobalCache": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use global verification cache shared across projects"
+        },
+        "trust.verboseOutput": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable verbose verification output"
+        },
+        "trust.showCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show CodeLens with verification status above function definitions"
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "rust",
+        "extensions": [".rs"]
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "trust.verify",
+        "key": "ctrl+alt+t",
+        "mac": "cmd+alt+t",
+        "when": "editorLangId == rust"
+      },
+      {
+        "command": "trust.verifyWorkspace",
+        "key": "ctrl+alt+shift+t",
+        "mac": "cmd+alt+shift+t",
+        "when": "editorLangId == rust"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^18.x",
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^6.x",
+    "@typescript-eslint/parser": "^6.x",
+    "eslint": "^8.x",
+    "typescript": "^5.x"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dropbox/dLANG/tRust"
+  }
+}

@@ -1,0 +1,27 @@
+#!/bin/bash
+#
+# tswift-ffi-verify - Verify Swift/Rust FFI compatibility
+#
+# This wrapper locates the Rust binary built from vc-ir-swift.
+#
+# Usage:
+#   tswift-ffi-verify --swift <files...> --rust <files...> [OPTIONS]
+#   tswift-ffi-verify --swift <files...> --ffi-contract <contract.ffi.json> [OPTIONS]
+#   tswift-ffi-verify --emit-contract <output.ffi.json> --rust <files...>
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+BINARY="$PROJECT_ROOT/vc-ir-swift/target/release/tswift-ffi-verify"
+if [ ! -x "$BINARY" ]; then
+    BINARY="$PROJECT_ROOT/vc-ir-swift/target/debug/tswift-ffi-verify"
+fi
+
+if [ ! -x "$BINARY" ]; then
+    echo "Error: tswift-ffi-verify binary not found. Run 'cargo build --release --bin tswift-ffi-verify' in $PROJECT_ROOT/vc-ir-swift" >&2
+    exit 2
+fi
+
+exec "$BINARY" "$@"
+

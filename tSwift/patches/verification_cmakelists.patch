@@ -1,0 +1,23 @@
+diff --git a/lib/SILOptimizer/Verification/CMakeLists.txt b/lib/SILOptimizer/Verification/CMakeLists.txt
+new file mode 100644
+index 0000000000..abcd123456
+--- /dev/null
++++ b/lib/SILOptimizer/Verification/CMakeLists.txt
+@@ -0,0 +1,17 @@
++# CMakeLists.txt for tSwift verification pass
++#
++# This builds the formal verification pass that extracts @requires/@ensures specs
++# and generates verification conditions for proving with Z4/Kani/Lean backends.
++
++target_sources(swiftSILOptimizer PRIVATE
++  ConditionParser.cpp
++  SilTranslator.cpp
++  SpecExtraction.cpp
++  SILVerificationPass.cpp
++  SolverInterface.cpp
++  VcIrGen.cpp
++)
++
++# Note: Header files (*.h) are in the same directory
++# ConditionAST.h, ConditionParser.h, SilTranslator.h,
++# SolverInterface.h, VcIrGen.h

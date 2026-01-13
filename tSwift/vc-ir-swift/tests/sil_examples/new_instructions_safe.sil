@@ -1,0 +1,74 @@
+sil_stage canonical
+
+import Swift
+
+// Test dynamic_function_ref instruction
+sil @test_dynamic_function_ref : $@convention(thin) () -> () {
+bb0:
+  %0 = dynamic_function_ref @some_replaceable_func : $@convention(thin) () -> ()
+  %1 = apply %0() : $@convention(thin) () -> ()
+  %2 = tuple ()
+  return %2 : $()
+}
+
+// Test has_symbol instruction
+sil @test_has_symbol : $@convention(thin) () -> Builtin.Int1 {
+bb0:
+  %0 = has_symbol #Int.init
+  return %0 : $Builtin.Int1
+}
+
+// Test alloc_global instruction
+sil @test_alloc_global : $@convention(thin) () -> () {
+bb0:
+  alloc_global @some_global
+  %0 = global_addr @some_global : $*Int
+  %1 = tuple ()
+  return %1 : $()
+}
+
+// Test explicit_copy_addr instruction
+sil @test_explicit_copy_addr : $@convention(thin) (@in_guaranteed Int) -> () {
+bb0(%0 : $*Int):
+  %1 = alloc_stack $Int
+  explicit_copy_addr %0 to [init] %1 : $*Int
+  destroy_addr %1 : $*Int
+  dealloc_stack %1 : $*Int
+  %2 = tuple ()
+  return %2 : $()
+}
+
+// Test destructure_struct instruction
+sil @test_destructure_struct : $@convention(thin) (Int) -> Builtin.Int64 {
+bb0(%0 : $Int):
+  (%1) = destructure_struct %0 : $Int
+  return %1 : $Builtin.Int64
+}
+
+// Test mark_dependence instruction
+sil @test_mark_dependence : $@convention(thin) (@owned AnyObject, @guaranteed AnyObject) -> @owned AnyObject {
+bb0(%0 : $AnyObject, %1 : $AnyObject):
+  %2 = mark_dependence %0 : $AnyObject on %1 : $AnyObject
+  return %2 : $AnyObject
+}
+
+// Test mark_uninitialized instruction
+sil @test_mark_uninitialized : $@convention(thin) () -> () {
+bb0:
+  %0 = alloc_stack $Int
+  %1 = mark_uninitialized [var] %0 : $*Int
+  destroy_addr %1 : $*Int
+  dealloc_stack %0 : $*Int
+  %2 = tuple ()
+  return %2 : $()
+}
+
+// Test return_borrow terminator (in OSSA mode)
+sil [ossa] @test_return_borrow : $@convention(thin) (@guaranteed Int) -> @guaranteed Int {
+bb0(%0 : @guaranteed $Int):
+  return_borrow %0 : $Int
+}
+
+// Helper declarations
+sil @some_replaceable_func : $@convention(thin) () -> ()
+sil_global @some_global : $Int

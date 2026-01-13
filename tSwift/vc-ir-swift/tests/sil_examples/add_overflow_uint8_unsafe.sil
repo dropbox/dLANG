@@ -1,0 +1,23 @@
+// SIL test file: UInt8 Addition with overflow check
+// Tests that bitwidth-specific bounds (0 to 255) are used
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// UInt8 add function with overflow check
+sil hidden @add_uint8 : $@convention(thin) (UInt8, UInt8) -> UInt8 {
+bb0(%0 : $UInt8, %1 : $UInt8):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %4 = struct_extract %0, #UInt8._value
+  %5 = struct_extract %1, #UInt8._value
+  %6 = integer_literal $Builtin.Int1, -1
+  %7 = builtin "uadd_with_overflow_Int8"(%4, %5, %6) : $(Builtin.Int8, Builtin.Int1)
+  %8 = tuple_extract %7, 0
+  %9 = tuple_extract %7, 1
+  cond_fail %9, "arithmetic overflow"
+  %11 = struct $UInt8 (%8)
+  return %11
+}

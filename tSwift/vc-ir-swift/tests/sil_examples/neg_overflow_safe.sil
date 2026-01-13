@@ -1,0 +1,30 @@
+// SIL test file: Negation with constrained input (safe from overflow)
+// The @_requires precondition constrains input so negation overflow is impossible.
+// Auto-VC for overflow should PASS because x is bounded away from Int.min.
+//
+// Negation overflow: -Int.min would exceed Int.max
+// Safe when x is bounded: x in [-1B, +1B] means -x in [-1B, +1B]
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe negation: input constrained to prevent overflow
+// When x is in [-1_000_000_000, 1_000_000_000], -x is also in that range
+@_requires("x >= -1000000000 && x <= 1000000000")
+func safeNegate(_ x: Int) -> Int
+
+sil hidden @safeNegate : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  %2 = struct_extract %0, #Int._value
+  %3 = integer_literal $Builtin.Int64, 0
+  %4 = integer_literal $Builtin.Int1, -1
+  %5 = builtin "ssub_with_overflow_Int64"(%3, %2, %4) : $(Builtin.Int64, Builtin.Int1)
+  %6 = tuple_extract %5, 0
+  %7 = tuple_extract %5, 1
+  cond_fail %7, "arithmetic overflow"
+  %9 = struct $Int (%6)
+  return %9
+}

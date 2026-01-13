@@ -1,0 +1,33 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// getOrDefault: returns the unwrapped value if .some, otherwise returns the default
+// This tests switch_enum_addr for indirect enum switching
+// The postcondition uses symbolic unwrap_0 which represents the unwrapped payload
+@_requires("defaultValue >= 0")
+@_requires("unwrap_0 >= 0")
+@_ensures("result >= 0")
+func getOrDefault(_ opt: Optional<Int>, _ defaultValue: Int) -> Int
+
+sil hidden @$s16switch_enum_addr12getOrDefaultyS2iSg_SitF : $@convention(thin) (@in Optional<Int>, Int) -> Int {
+bb0(%0 : $*Optional<Int>, %1 : $Int):
+  debug_value %1, let, name "defaultValue", argno 2
+  // Switch on the address-based Optional
+  switch_enum_addr %0 : $*Optional<Int>, case #Optional.some!enumelt: bb1, case #Optional.none!enumelt: bb2
+
+bb1:
+  // .some case: extract the payload address and load the value
+  %3 = unchecked_take_enum_data_addr %0 : $*Optional<Int>, #Optional.some!enumelt
+  %4 = load %3 : $*Int
+  br bb3(%4)
+
+bb2:
+  // .none case: return the default value
+  br bb3(%1)
+
+bb3(%5 : $Int):
+  return %5
+} // end sil function '$s16switch_enum_addr12getOrDefaultyS2iSg_SitF'

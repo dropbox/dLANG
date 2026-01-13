@@ -1,0 +1,30 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// unwrapOrZero: returns the value if Some, otherwise 0
+// With precondition that the payload (if present) is non-negative,
+// we can prove the postcondition result >= 0
+@_requires("unwrap_0 >= 0")
+@_ensures("result >= 0")
+func unwrapOrZero(_ value: Optional<Int>) -> Int
+
+// Implementation using switch_enum
+sil hidden @$s16switch_enum_test12unwrapOrZeroyS2iSgF : $@convention(thin) (Optional<Int>) -> Int {
+bb0(%0 : $Optional<Int>):
+  debug_value %0, let, name "value", argno 1
+  switch_enum %0 : $Optional<Int>, case #Optional.some!enumelt: bb1, case #Optional.none!enumelt: bb2
+
+bb1(%1 : $Int):
+  // In Some case: %1 is the unwrapped Int
+  debug_value %1, let, name "payload"
+  return %1
+
+bb2:
+  // In None case: return 0
+  %2 = integer_literal $Builtin.Int64, 0
+  %3 = struct $Int (%2)
+  return %3
+} // end sil function '$s16switch_enum_test12unwrapOrZeroyS2iSgF'

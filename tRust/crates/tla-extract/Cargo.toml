@@ -1,0 +1,16 @@
+[package]
+name = "tla-extract"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "TLA2 state machine extraction from Rust async code"
+readme = "../../README.md"
+keywords = ["verification", "rust", "compiler"]
+categories = ["development-tools", "compilers"]
+
+[dependencies]
+vc_ir = { path = "../../vc_ir" }
+serde.workspace = true
+
+[dev-dependencies]

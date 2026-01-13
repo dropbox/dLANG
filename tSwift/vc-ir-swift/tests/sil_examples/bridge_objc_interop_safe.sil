@@ -1,0 +1,206 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Test file for bridge object conversions and ObjC interop instructions
+
+class NSObject {
+  @objc deinit
+  init()
+}
+
+class MyClass : NSObject {
+  @_hasStorage var value: Int { get set }
+  @objc deinit
+  init()
+}
+
+// Test function: ref_to_bridge_object and bridge_object_to_ref
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testRefToBridgeObject() -> Int
+
+sil hidden @$s19bridge_objc_interop21testRefToBridgeObjectSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate a class instance
+  %0 = alloc_ref $MyClass
+
+  // Get bits value for encoding
+  %1 = integer_literal $Builtin.Word, 0
+
+  // Convert reference to bridge object (encodes ref + bits)
+  %2 = ref_to_bridge_object %0 : $MyClass, %1 : $Builtin.Word
+
+  // Extract reference back from bridge object
+  %3 = bridge_object_to_ref %2 : $Builtin.BridgeObject to $MyClass
+
+  // Clean up
+  dealloc_ref %3 : $MyClass
+
+  // Return constant
+  %5 = integer_literal $Builtin.Int64, 42
+  %6 = struct $Int (%5)
+  return %6 : $Int
+}
+
+// Test function: bridge_object_to_word
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testBridgeObjectToWord() -> Int
+
+sil hidden @$s19bridge_objc_interop21testBridgeObjectToWordSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate a class instance
+  %0 = alloc_ref $MyClass
+
+  // Create bridge object
+  %1 = integer_literal $Builtin.Word, 7
+  %2 = ref_to_bridge_object %0 : $MyClass, %1 : $Builtin.Word
+
+  // Extract raw word from bridge object
+  %3 = bridge_object_to_word %2 : $Builtin.BridgeObject
+
+  // Extract reference for cleanup
+  %4 = bridge_object_to_ref %2 : $Builtin.BridgeObject to $MyClass
+  dealloc_ref %4 : $MyClass
+
+  // Return constant
+  %6 = integer_literal $Builtin.Int64, 100
+  %7 = struct $Int (%6)
+  return %7 : $Int
+}
+
+// Test function: classify_bridge_object
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testClassifyBridgeObject() -> Int
+
+sil hidden @$s19bridge_objc_interop24testClassifyBridgeObjectSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate a class instance
+  %0 = alloc_ref $MyClass
+
+  // Create bridge object
+  %1 = integer_literal $Builtin.Word, 0
+  %2 = ref_to_bridge_object %0 : $MyClass, %1 : $Builtin.Word
+
+  // Classify the bridge object (returns tuple of classification info)
+  %3 = classify_bridge_object %2 : $Builtin.BridgeObject
+
+  // Extract reference for cleanup
+  %4 = bridge_object_to_ref %2 : $Builtin.BridgeObject to $MyClass
+  dealloc_ref %4 : $MyClass
+
+  // Return constant
+  %6 = integer_literal $Builtin.Int64, 50
+  %7 = struct $Int (%6)
+  return %7 : $Int
+}
+
+// Test function: value_to_bridge_object
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testValueToBridgeObject() -> Int
+
+sil hidden @$s19bridge_objc_interop22testValueToBridgeObjectSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Create a tagged pointer value (simulates small value like Int)
+  %0 = integer_literal $Builtin.Word, 42
+
+  // Convert word value to bridge object (for tagged pointer representation)
+  %1 = value_to_bridge_object %0 : $Builtin.Word
+
+  // Extract word back
+  %2 = bridge_object_to_word %1 : $Builtin.BridgeObject
+
+  // Return constant
+  %3 = integer_literal $Builtin.Int64, 42
+  %4 = struct $Int (%3)
+  return %4 : $Int
+}
+
+// Test function: thick_to_objc_metatype and objc_to_thick_metatype
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testMetatypeConversion() -> Int
+
+sil hidden @$s19bridge_objc_interop22testMetatypeConversionSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Get Swift metatype (thick representation)
+  %0 = metatype $@thick MyClass.Type
+
+  // Convert Swift metatype to ObjC metatype (class object)
+  %1 = thick_to_objc_metatype %0 : $@thick MyClass.Type
+
+  // Convert ObjC metatype back to Swift metatype
+  %2 = objc_to_thick_metatype %1 : $@objc_metatype MyClass.Type to $@thick MyClass.Type
+
+  // Return constant
+  %3 = integer_literal $Builtin.Int64, 99
+  %4 = struct $Int (%3)
+  return %4 : $Int
+}
+
+// Test function: project_block_storage and init_block_storage_header
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testBlockStorage() -> Int
+
+sil hidden @$s19bridge_objc_interop16testBlockStorageSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate block storage on stack
+  %0 = alloc_stack $@block_storage Int
+
+  // Project capture storage address from block storage
+  %1 = project_block_storage %0 : $*@block_storage Int
+
+  // Store captured value
+  %2 = integer_literal $Builtin.Int64, 123
+  %3 = struct $Int (%2)
+  store %3 to %1 : $*Int
+
+  // Get invoke function reference
+  %5 = function_ref @blockInvoke : $@convention(c) (@inout_aliasable @block_storage Int) -> Int
+
+  // Initialize block storage header with invoke function
+  %6 = init_block_storage_header %0 : $*@block_storage Int, invoke %5 : $@convention(c) (@inout_aliasable @block_storage Int) -> Int, type $@convention(block) () -> Int
+
+  // Load captured value back
+  %7 = project_block_storage %0 : $*@block_storage Int
+  %8 = load %7 : $*Int
+
+  // Cleanup
+  dealloc_stack %0 : $*@block_storage Int
+
+  return %8 : $Int
+}
+
+// Block invoke function
+sil hidden @blockInvoke : $@convention(c) (@inout_aliasable @block_storage Int) -> Int {
+bb0(%0 : $*@block_storage Int):
+  %1 = project_block_storage %0 : $*@block_storage Int
+  %2 = load %1 : $*Int
+  return %2 : $Int
+}
+
+// VTable for MyClass
+sil_vtable MyClass {
+  #MyClass.value!getter: (MyClass) -> () -> Int : @$s19bridge_objc_interop7MyClassC5valueSivg
+  #MyClass.value!setter: (MyClass) -> (Int) -> () : @$s19bridge_objc_interop7MyClassC5valueSivs
+  #MyClass.init!allocator: (MyClass.Type) -> () -> MyClass : @$s19bridge_objc_interop7MyClassCACycfC
+  #MyClass.deinit!deallocator: @$s19bridge_objc_interop7MyClassCfD
+}

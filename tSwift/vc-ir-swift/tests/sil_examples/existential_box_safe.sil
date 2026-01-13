@@ -1,0 +1,89 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Tests boxed existential instructions:
+// - alloc_existential_box: allocates heap storage for protocol-typed value
+// - project_existential_box: projects address of value inside box
+// - open_existential_box: opens box with concrete type metadata bound
+// - open_existential_box_value: opens box to value (not address)
+// - dealloc_existential_box: deallocates the box
+
+protocol P {}
+
+struct ConcreteType : P {}
+
+// allocExistentialBox: Allocates a boxed existential container
+// Uses alloc_existential_box to allocate heap storage for protocol value
+@_ensures("true")
+func allocExistentialBox() -> P
+
+sil hidden @$s15existential_box05allocaB0AA1P_pyF : $@convention(thin) () -> @owned P {
+bb0:
+  // Allocate a boxed existential container for P containing ConcreteType
+  %0 = alloc_existential_box $P, $ConcreteType
+  return %0 : $P
+} // end sil function '$s15existential_box05allocaB0AA1P_pyF'
+
+// projectExistentialBox: Projects the address of value inside box
+// Uses project_existential_box to get address for initialization
+@_ensures("true")
+func projectExistentialBox(_ p: P) -> ()
+
+sil hidden @$s15existential_box07projectaB0yyAA1P_pF : $@convention(thin) (@owned P) -> () {
+bb0(%0 : $P):
+  debug_value %0, let, name "p", argno 1
+  // Project the address where the concrete value is stored
+  %2 = project_existential_box $ConcreteType in %0 : $P
+  %3 = tuple ()
+  release_value %0 : $P
+  return %3 : $()
+} // end sil function '$s15existential_box07projectaB0yyAA1P_pF'
+
+// openExistentialBox: Opens a boxed existential to access its contents
+// Uses open_existential_box to get address with opened archetype
+@_ensures("true")
+func openExistentialBox(_ p: P) -> ()
+
+sil hidden @$s15existential_box04openaB0yyAA1P_pF : $@convention(thin) (@owned P) -> () {
+bb0(%0 : $P):
+  debug_value %0, let, name "p", argno 1
+  // Open the boxed existential to get the address with concrete type
+  %2 = open_existential_box %0 : $P to $*@opened("01234567-89ab-cdef-0123-000000000001", P) Self
+  // The value is now accessible via %2 as the concrete type
+  %3 = tuple ()
+  release_value %0 : $P
+  return %3 : $()
+} // end sil function '$s15existential_box04openaB0yyAA1P_pF'
+
+// openExistentialBoxValue: Opens a boxed existential to a value
+// Uses open_existential_box_value for value semantics
+@_ensures("true")
+func openExistentialBoxValue(_ p: P) -> ()
+
+sil hidden @$s15existential_box04openaB5ValueyyAA1P_pF : $@convention(thin) (@owned P) -> () {
+bb0(%0 : $P):
+  debug_value %0, let, name "p", argno 1
+  // Open the boxed existential to a value (not address)
+  %2 = open_existential_box_value %0 : $P to $@opened("01234567-89ab-cdef-0123-000000000002", P) Self
+  %3 = tuple ()
+  release_value %0 : $P
+  return %3 : $()
+} // end sil function '$s15existential_box04openaB5ValueyyAA1P_pF'
+
+// deallocExistentialBox: Deallocates an uninitialized boxed existential
+// Uses dealloc_existential_box after allocation without initialization
+@_ensures("true")
+func deallocExistentialBox() -> ()
+
+sil hidden @$s15existential_box07deallocaB0yyF : $@convention(thin) () -> () {
+bb0:
+  // Allocate a boxed existential (but don't fully initialize it)
+  %0 = alloc_existential_box $P, $ConcreteType
+  // Deallocate without storing a value (box is uninitialized)
+  dealloc_existential_box %0 : $P, $ConcreteType
+  %2 = tuple ()
+  return %2 : $()
+} // end sil function '$s15existential_box07deallocaB0yyF'

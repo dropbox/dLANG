@@ -1,0 +1,27 @@
+// SIL test file: Int16 negation as subtraction with overflow check
+// Swift implements -x as 0 - x using ssub_with_overflow
+// This can overflow when x = Int16.min (because -Int16.min > Int16.max)
+//
+// Bounds: -32768 to 32767
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Negation function: returns -x
+// Overflow: -(-32768) = 32768, which exceeds Int16.max (32767)
+sil hidden @neg_int16 : $@convention(thin) (Int16) -> Int16 {
+bb0(%0 : $Int16):
+  debug_value %0, let, name "x", argno 1
+  %2 = struct_extract %0, #Int16._value
+  %3 = integer_literal $Builtin.Int16, 0
+  %4 = integer_literal $Builtin.Int1, -1
+  %5 = builtin "ssub_with_overflow_Int16"(%3, %2, %4) : $(Builtin.Int16, Builtin.Int1)
+  %6 = tuple_extract %5, 0
+  %7 = tuple_extract %5, 1
+  cond_fail %7, "arithmetic overflow"
+  %9 = struct $Int16 (%6)
+  return %9
+}
+

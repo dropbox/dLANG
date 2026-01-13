@@ -1,0 +1,17 @@
+[package]
+name = "trust_z3"
+version = "0.1.0"
+edition = "2021"
+description = "Z3 SMT solver backend for tRust"
+license = "MIT OR Apache-2.0"
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["verification", "rust", "compiler"]
+categories = ["development-tools", "compilers"]
+
+[dependencies]
+vc_ir = { path = "../../vc_ir" }
+z3 = "0.19"
+
+[dev-dependencies]
+# Test helpers

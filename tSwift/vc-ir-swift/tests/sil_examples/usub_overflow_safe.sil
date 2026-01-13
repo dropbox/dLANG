@@ -1,0 +1,29 @@
+// SIL test file: Unsigned subtraction with constrained inputs (safe from underflow)
+// The @_requires precondition constrains inputs so a is always >= b.
+// Auto-VC for overflow should PASS because a_min >= b_max guarantees non-negative result.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe unsigned subtract: a in [1B, 2B], b in [0, 1B]
+// Result interval: [1B - 1B, 2B - 0] = [0, 2B]
+// This is within UInt64 bounds [0, 2^64-1], so no underflow
+@_requires("a >= 1000000000 && a <= 2000000000 && b >= 0 && b <= 1000000000")
+func safeUSub(_ a: UInt, _ b: UInt) -> UInt
+
+sil hidden @safeUSub : $@convention(thin) (UInt, UInt) -> UInt {
+bb0(%0 : $UInt, %1 : $UInt):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %4 = struct_extract %0, #UInt._value
+  %5 = struct_extract %1, #UInt._value
+  %6 = integer_literal $Builtin.Int1, -1
+  %7 = builtin "usub_with_overflow_Int64"(%4, %5, %6) : $(Builtin.Int64, Builtin.Int1)
+  %8 = tuple_extract %7, 0
+  %9 = tuple_extract %7, 1
+  cond_fail %9, "arithmetic overflow"
+  %11 = struct $UInt (%8)
+  return %11
+}

@@ -1,0 +1,26 @@
+[package]
+name = "vc_ir"
+version = "0.1.0"
+edition = "2021"
+description = "Verification Condition Intermediate Representation for tRust"
+license = "MIT OR Apache-2.0"
+repository.workspace = true
+readme = "../README.md"
+keywords = ["verification", "rust", "compiler"]
+categories = ["development-tools", "compilers"]
+
+[dependencies]
+# Serialization for caching proofs
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+# TOML parsing for Cargo.toml metadata
+toml = "0.8"
+# Regex for variable substitution in tactic execution
+regex = "1.10"
+
+[dev-dependencies]
+
+[features]
+default = []
+# rustc feature will be enabled when integrating with actual rustc
+# rustc = ["dep:rustc_index"]

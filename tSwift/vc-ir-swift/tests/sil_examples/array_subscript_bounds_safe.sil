@@ -1,0 +1,32 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Array subscript with explicit bounds preconditions: auto-VC should PASS.
+// The `_requires` annotations ensure `i` is within [0, 10), so the bounds traps
+// (cond_fail) are unreachable.
+
+@_requires("i >= 0")
+@_requires("i < 10")
+func getElementSafe(_ arr: [Int], _ i: Int) -> Int
+
+sil hidden @getElementSafe : $@convention(thin) (@guaranteed Array<Int>, Int) -> Int {
+bb0(%0 : $Array<Int>, %1 : $Int):
+  debug_value %0, let, name "arr", argno 1, loc "array.swift":7:18, scope 3
+  debug_value %1, let, name "i", argno 2, loc "array.swift":7:32, scope 3
+  %true = integer_literal $Builtin.Int1, -1, loc "array.swift":7:50, scope 3
+  %zero = integer_literal $Builtin.Int64, 0, loc "array.swift":7:50, scope 3
+  %idx = struct_extract %1, #Int._value, loc "array.swift":7:50, scope 3
+  %neg = builtin "cmp_slt_Int64"(%idx, %zero) : $Builtin.Int1, loc "array.swift":7:50, scope 3
+  cond_fail %neg, "Index out of range", loc "array.swift":7:50, scope 3
+  %len = integer_literal $Builtin.Int64, 10, loc "array.swift":7:50, scope 3
+  %in = builtin "cmp_slt_Int64"(%idx, %len) : $Builtin.Int1, loc "array.swift":7:50, scope 3
+  %oob = builtin "xor_Int1"(%in, %true) : $Builtin.Int1, loc "array.swift":7:50, scope 3
+  cond_fail %oob, "Index out of range", loc "array.swift":7:50, scope 3
+  %r = integer_literal $Builtin.Int64, 0, loc "array.swift":7:50, scope 3
+  %ret = struct $Int (%r), loc "array.swift":7:50, scope 3
+  return %ret, loc "array.swift":7:43, scope 3
+}
+

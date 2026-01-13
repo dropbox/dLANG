@@ -1,0 +1,369 @@
+#!/bin/bash
+# trustv - tRust standalone verifier
+# Verifies Rust code without compiling
+#
+# Usage: trustv [options] <source.rs>
+#        trustv --help
+#        trustv --explain ERROR_CODE
+#
+# Examples:
+#   trustv hello.rs                      # Verify only (no compilation)
+#   trustv --verbose hello.rs            # Verbose verification output
+#   trustv --output-format=json hello.rs # JSON output for AI agents
+#   trustv --profile hello.rs            # Profile verification performance
+#   trustv --explain E0900               # Explain verification error
+
+set -e
+
+# Find the script's directory to locate the build
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRUST_ROOT="$(dirname "$SCRIPT_DIR")"
+EXPLANATIONS_FILE="$SCRIPT_DIR/error_explanations.txt"
+
+# Cache directories
+PROJECT_CACHE_DIR="${TRUST_CACHE_DIR:-.trust_cache}"
+DEFAULT_GLOBAL_CACHE="${HOME}/.cache/trust"
+GLOBAL_CACHE_DIR="${TRUST_GLOBAL_CACHE_DIR:-$DEFAULT_GLOBAL_CACHE}"
+CACHE_DIR="$PROJECT_CACHE_DIR"
+USE_GLOBAL_CACHE="${TRUST_USE_GLOBAL_CACHE:-0}"
+
+# Compute content hash for a file (SHA256)
+compute_file_hash() {
+    local file="$1"
+    if [ -f "$file" ]; then
+        if command -v sha256sum &>/dev/null; then
+            sha256sum "$file" | cut -d' ' -f1
+        elif command -v shasum &>/dev/null; then
+            shasum -a 256 "$file" | cut -d' ' -f1
+        else
+            stat -f "%m-%z" "$file" 2>/dev/null || stat --format="%Y-%s" "$file" 2>/dev/null
+        fi
+    fi
+}
+
+# Get cache key for a source file
+get_cache_key() {
+    local file="$1"
+    local file_hash
+    file_hash=$(compute_file_hash "$file")
+    local compiler_version
+    compiler_version=$("$RUSTC" --version 2>/dev/null | head -1 || echo "unknown")
+    if command -v sha256sum &>/dev/null; then
+        echo "${file_hash}_${compiler_version}" | sha256sum | cut -d' ' -f1
+    else
+        echo "${file_hash}_${compiler_version}" | shasum -a 256 | cut -d' ' -f1
+    fi
+}
+
+# Check if verification result is cached
+CACHE_HIT_SOURCE=""
+check_cache() {
+    local source_file="$1"
+    local cache_key
+    cache_key=$(get_cache_key "$source_file")
+
+    local project_cache_file="$PROJECT_CACHE_DIR/$cache_key"
+    if [ -f "$project_cache_file" ]; then
+        local cached_result
+        cached_result=$(cat "$project_cache_file")
+        if [ "$cached_result" = "verified" ]; then
+            CACHE_HIT_SOURCE="project"
+            return 0
+        fi
+    fi
+
+    if [ "$USE_GLOBAL_CACHE" = "1" ]; then
+        local global_cache_file="$GLOBAL_CACHE_DIR/$cache_key"
+        if [ -f "$global_cache_file" ]; then
+            local cached_result
+            cached_result=$(cat "$global_cache_file")
+            if [ "$cached_result" = "verified" ]; then
+                CACHE_HIT_SOURCE="global"
+                mkdir -p "$PROJECT_CACHE_DIR"
+                cp "$global_cache_file" "$project_cache_file" 2>/dev/null || true
+                return 0
+            fi
+        fi
+    fi
+
+    CACHE_HIT_SOURCE=""
+    return 1
+}
+
+# Store verification result in cache
+store_cache() {
+    local source_file="$1"
+    local result="$2"
+    local cache_key
+    cache_key=$(get_cache_key "$source_file")
+    local timestamp
+    timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    mkdir -p "$PROJECT_CACHE_DIR"
+    echo "$result" > "$PROJECT_CACHE_DIR/$cache_key"
+    {
+        echo "file=$source_file"
+        echo "timestamp=$timestamp"
+        echo "result=$result"
+    } > "$PROJECT_CACHE_DIR/$cache_key.meta"
+
+    if [ "$USE_GLOBAL_CACHE" = "1" ]; then
+        mkdir -p "$GLOBAL_CACHE_DIR"
+        echo "$result" > "$GLOBAL_CACHE_DIR/$cache_key"
+        {
+            echo "file=$source_file"
+            echo "timestamp=$timestamp"
+            echo "result=$result"
+            echo "project=$(pwd)"
+        } > "$GLOBAL_CACHE_DIR/$cache_key.meta"
+    fi
+}
+
+# Function to explain an error code
+explain_error() {
+    local code="$1"
+
+    if [ ! -f "$EXPLANATIONS_FILE" ]; then
+        echo "Error: explanations file not found at $EXPLANATIONS_FILE" >&2
+        exit 1
+    fi
+
+    local found=0
+    while IFS='|' read -r err_code short_desc long_desc; do
+        [[ "$err_code" =~ ^#.*$ || -z "$err_code" ]] && continue
+
+        if [ "$err_code" = "$code" ]; then
+            found=1
+            echo ""
+            echo "Error code: $code"
+            echo "============================================"
+            echo ""
+            echo "Short: $short_desc"
+            echo ""
+            echo "Explanation:"
+            echo ""
+            echo -e "$long_desc"
+            echo ""
+            break
+        fi
+    done < "$EXPLANATIONS_FILE"
+
+    if [ $found -eq 0 ]; then
+        echo "Error: unknown error code '$code'" >&2
+        echo "" >&2
+        echo "Available tRust verification error codes:" >&2
+        echo "  E0900 - verification condition not provable" >&2
+        echo "  E0901 - termination not proven" >&2
+        echo "  E0902 - temporal property violated" >&2
+        echo "  E0903 - precondition not established" >&2
+        echo "  E0904 - invariant not preserved" >&2
+        echo "  E0905 - refinement type mismatch" >&2
+        echo "  E0906 - arithmetic overflow possible" >&2
+        echo "  E0907 - division by zero possible" >&2
+        echo "  E0908 - array index out of bounds" >&2
+        echo "  E0909 - unsafe block requires proof" >&2
+        echo "" >&2
+        echo "Run 'trustv --explain CODE' for details." >&2
+        exit 1
+    fi
+}
+
+# Sysroot location
+DEFAULT_SYSROOT="$TRUST_ROOT/build/host/stage1"
+SYSROOT="${TRUST_SYSROOT:-$DEFAULT_SYSROOT}"
+RUSTC="$SYSROOT/bin/rustc"
+
+# Check if rustc exists
+if [ ! -x "$RUSTC" ]; then
+    echo "Error: tRust compiler not found at $RUSTC" >&2
+    if [ -n "${TRUST_SYSROOT:-}" ]; then
+        echo "TRUST_SYSROOT is set to: $TRUST_SYSROOT" >&2
+    fi
+    echo "Please build tRust first: cd upstream/rustc && ./x build --stage 1" >&2
+    exit 1
+fi
+
+# Parse arguments
+VERBOSE=0
+PROFILE=0
+USE_CACHE=1
+OUTPUT_FORMAT=""
+ARGS=()
+SOURCE_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --explain)
+            shift
+            if [[ $# -eq 0 ]]; then
+                echo "Error: --explain requires an error code (e.g., E0900)" >&2
+                exit 2
+            fi
+            explain_error "$1"
+            exit 0
+            ;;
+        --verbose|-v)
+            VERBOSE=1
+            shift
+            ;;
+        --profile)
+            PROFILE=1
+            shift
+            ;;
+        --no-cache)
+            USE_CACHE=0
+            shift
+            ;;
+        --use-global-cache)
+            USE_GLOBAL_CACHE=1
+            shift
+            ;;
+        --output-format=*)
+            OUTPUT_FORMAT="${1#*=}"
+            shift
+            ;;
+        --output-format)
+            shift
+            if [[ $# -eq 0 ]]; then
+                echo "Error: --output-format requires a value (human or json)" >&2
+                exit 2
+            fi
+            OUTPUT_FORMAT="$1"
+            shift
+            ;;
+        --help|-h)
+            echo "trustv - tRust standalone verifier"
+            echo ""
+            echo "Usage: trustv [options] <source.rs>"
+            echo "       trustv --explain ERROR_CODE"
+            echo ""
+            echo "Options:"
+            echo "  --verbose, -v         Enable verbose verification output"
+            echo "  --profile             Show verification timing breakdown"
+            echo "  --output-format=FMT   Output format: 'human' (default) or 'json'"
+            echo "  --no-cache            Disable verification caching"
+            echo "  --use-global-cache    Enable global cache shared across projects"
+            echo "  --explain CODE        Explain a verification error code (e.g., E0900)"
+            echo "  --help, -h            Show this help message"
+            echo ""
+            echo "Environment:"
+            echo "  TRUST_SYSROOT             Override sysroot (default: $DEFAULT_SYSROOT)"
+            echo "  TRUST_CACHE_DIR           Project cache directory (default: .trust_cache)"
+            echo "  TRUST_GLOBAL_CACHE_DIR    Global cache directory (default: $DEFAULT_GLOBAL_CACHE)"
+            echo "  TRUST_USE_GLOBAL_CACHE    Set to 1 to enable global caching by default"
+            echo ""
+            echo "This tool verifies Rust code without compiling. For compilation with"
+            echo "verification, use trustc instead."
+            echo ""
+            echo "Verification attributes:"
+            echo "  #[requires(\"cond\")]    - Precondition that must hold on entry"
+            echo "  #[ensures(\"cond\")]     - Postcondition that must hold on exit"
+            echo "  #[invariant(\"cond\")]   - Loop invariant"
+            echo "  #[decreases(\"expr\")]   - Termination measure for recursion"
+            echo ""
+            echo "Verification error codes (use --explain for details):"
+            echo "  E0900  verification condition not provable"
+            echo "  E0901  termination not proven"
+            echo "  E0902  temporal property violated"
+            echo "  E0903  precondition not established"
+            echo "  E0904  invariant not preserved"
+            echo "  E0905  refinement type mismatch"
+            echo "  E0906  arithmetic overflow possible"
+            echo "  E0907  division by zero possible"
+            echo "  E0908  array index out of bounds"
+            echo "  E0909  unsafe block requires proof"
+            echo ""
+            echo "Examples:"
+            echo "  trustv hello.rs                      # Verify only"
+            echo "  trustv --verbose hello.rs            # Verbose output"
+            echo "  trustv --output-format=json hello.rs # JSON for AI agents"
+            echo "  trustv --explain E0900               # Explain error"
+            exit 0
+            ;;
+        *.rs)
+            SOURCE_FILE="$1"
+            ARGS+=("$1")
+            shift
+            ;;
+        *)
+            ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Require source file
+if [ -z "$SOURCE_FILE" ]; then
+    echo "Error: no source file specified" >&2
+    echo "Usage: trustv [options] <source.rs>" >&2
+    echo "Run 'trustv --help' for more information." >&2
+    exit 2
+fi
+
+# Build rustc command - verify only, no output
+CMD=("$RUSTC")
+CMD+=(--sysroot "$SYSROOT")
+CMD+=(-Zverify)
+CMD+=(--emit=metadata)  # Minimal output - just check, don't compile
+CMD+=(-o /dev/null)     # Discard any output
+
+# Add source file
+CMD+=("${ARGS[@]}")
+
+# Set environment variables
+export TRUST_OUTPUT_FORMAT="${OUTPUT_FORMAT:-${TRUST_OUTPUT_FORMAT:-human}}"
+
+if [ "$PROFILE" -eq 1 ]; then
+    export TRUST_VERIFY_PROFILE=1
+fi
+
+# Check cache
+CACHE_HIT=0
+if [ "$USE_CACHE" -eq 1 ] && [ -n "$SOURCE_FILE" ] && [ -f "$SOURCE_FILE" ]; then
+    if check_cache "$SOURCE_FILE"; then
+        CACHE_HIT=1
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "[trustv] Cache hit ($CACHE_HIT_SOURCE): $SOURCE_FILE (previously verified)" >&2
+        fi
+
+        # Output cached result
+        if [ "$TRUST_OUTPUT_FORMAT" = "json" ]; then
+            echo '{"status": "verified", "cached": true, "source": "'"$CACHE_HIT_SOURCE"'"}'
+        else
+            echo "Verification: PASSED (cached from $CACHE_HIT_SOURCE)"
+        fi
+        exit 0
+    else
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "[trustv] Cache miss: $SOURCE_FILE (will verify)" >&2
+        fi
+    fi
+fi
+
+# Run verification
+if [ "$VERBOSE" -eq 1 ]; then
+    echo "[trustv] Running: ${CMD[*]}" >&2
+    echo "[trustv] Output format: $TRUST_OUTPUT_FORMAT" >&2
+    RUST_LOG=rustc_verify=debug "${CMD[@]}"
+    result=$?
+else
+    "${CMD[@]}"
+    result=$?
+fi
+
+# Store result in cache
+if [ "$USE_CACHE" -eq 1 ] && [ -n "$SOURCE_FILE" ] && [ -f "$SOURCE_FILE" ]; then
+    if [ $result -eq 0 ]; then
+        store_cache "$SOURCE_FILE" "verified"
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "[trustv] Cached: $SOURCE_FILE as verified" >&2
+        fi
+    else
+        store_cache "$SOURCE_FILE" "failed"
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "[trustv] Cached: $SOURCE_FILE as failed" >&2
+        fi
+    fi
+fi
+
+exit $result

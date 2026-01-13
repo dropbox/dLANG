@@ -1,0 +1,490 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+func incrementingWhile(_ n: Int) -> Int
+
+func decrementingWhile(_ n: Int) -> Int
+
+func forInRange(_ n: Int) -> Int
+
+func forInClosedRange(_ n: Int) -> Int
+
+func nestedLoops(_ rows: Int, _ cols: Int) -> Int
+
+func stepByTwo(_ n: Int) -> Int
+
+func repeatWhileCountdown(_ n: Int) -> Int
+
+func strideLoop(_ n: Int) -> Int
+
+// main
+// Isolation: unspecified
+sil @main : $@convention(c) (Int32, UnsafeMutablePointer<Optional<UnsafeMutablePointer<Int8>>>) -> Int32 {
+[%1: noescape **]
+[global: ]
+bb0(%0 : $Int32, %1 : $UnsafeMutablePointer<Optional<UnsafeMutablePointer<Int8>>>):
+  %2 = integer_literal $Builtin.Int32, 0          // user: %3
+  %3 = struct $Int32 (%2)                         // user: %4
+  return %3                                       // id: %4
+} // end sil function 'main'
+
+// incrementingWhile(_:)
+// Isolation: unspecified
+sil hidden @$s13loop_patterns17incrementingWhileyS2iF : $@convention(thin) (Int) -> Int {
+[global: ]
+// %0 "n"                                         // users: %4, %1
+bb0(%0 : $Int):
+  debug_value %0, let, name "n", argno 1          // id: %1
+  %2 = integer_literal $Builtin.Int64, 0          // users: %7, %10, %5, %3
+  debug_value %2, var, name "i", type $Int, expr op_fragment:#Int._value // id: %3
+  %4 = struct_extract %0, #Int._value             // users: %5, %17
+  %5 = builtin "cmp_slt_Int64"(%2, %4) : $Builtin.Int1 // user: %6
+  cond_br %5, bb2, bb1                            // id: %6
+
+bb1:                                              // Preds: bb0
+  br bb6(%2)                                      // id: %7
+
+bb2:                                              // Preds: bb0
+  %8 = integer_literal $Builtin.Int64, 1          // user: %12
+  %9 = integer_literal $Builtin.Int1, -1          // user: %12
+  br bb3(%2)                                      // id: %10
+
+// %11                                            // user: %12
+bb3(%11 : $Builtin.Int64):                        // Preds: bb5 bb2
+  %12 = builtin "sadd_with_overflow_Int64"(%11, %8, %9) : $(Builtin.Int64, Builtin.Int1) // users: %14, %13
+  %13 = tuple_extract %12, 0                      // users: %19, %20, %17, %16
+  %14 = tuple_extract %12, 1                      // user: %15
+  cond_fail %14, "arithmetic overflow"            // id: %15
+  debug_value %13, var, name "i", type $Int, expr op_fragment:#Int._value // id: %16
+  %17 = builtin "cmp_slt_Int64"(%13, %4) : $Builtin.Int1 // user: %18
+  cond_br %17, bb5, bb4                           // id: %18
+
+bb4:                                              // Preds: bb3
+  br bb6(%13)                                     // id: %19
+
+bb5:                                              // Preds: bb3
+  br bb3(%13)                                     // id: %20
+
+// %21                                            // user: %22
+bb6(%21 : $Builtin.Int64):                        // Preds: bb4 bb1
+  %22 = struct $Int (%21)                         // user: %23
+  return %22                                      // id: %23
+} // end sil function '$s13loop_patterns17incrementingWhileyS2iF'
+
+// decrementingWhile(_:)
+// Isolation: unspecified
+sil hidden @$s13loop_patterns17decrementingWhileyS2iF : $@convention(thin) (Int) -> Int {
+[global: ]
+// %0 "n"                                         // users: %6, %3, %1
+bb0(%0 : $Int):
+  debug_value %0, let, name "n", argno 1          // id: %1
+  %2 = integer_literal $Builtin.Int64, 0          // users: %4, %17
+  %3 = struct_extract %0, #Int._value             // users: %9, %4
+  %4 = builtin "cmp_slt_Int64"(%2, %3) : $Builtin.Int1 // user: %5
+  cond_br %4, bb2, bb1                            // id: %5
+
+bb1:                                              // Preds: bb0
+  br bb6(%0)                                      // id: %6
+
+bb2:                                              // Preds: bb0
+  %7 = integer_literal $Builtin.Int64, 1          // user: %11
+  %8 = integer_literal $Builtin.Int1, -1          // user: %11
+  br bb3(%3)                                      // id: %9
+
+// %10                                            // user: %11
+bb3(%10 : $Builtin.Int64):                        // Preds: bb5 bb2
+  %11 = builtin "ssub_with_overflow_Int64"(%10, %7, %8) : $(Builtin.Int64, Builtin.Int1) // users: %13, %12
+  %12 = tuple_extract %11, 0                      // users: %17, %20, %16, %15
+  %13 = tuple_extract %11, 1                      // user: %14
+  cond_fail %13, "arithmetic overflow"            // id: %14
+  %15 = struct $Int (%12)                         // user: %19
+  debug_value %12, var, name "count", type $Int, expr op_fragment:#Int._value // id: %16
+  %17 = builtin "cmp_slt_Int64"(%2, %12) : $Builtin.Int1 // user: %18
+  cond_br %17, bb5, bb4                           // id: %18
+
+bb4:                                              // Preds: bb3
+  br bb6(%15)                                     // id: %19
+
+bb5:                                              // Preds: bb3
+  br bb3(%12)                                     // id: %20
+
+// %21                                            // user: %22
+bb6(%21 : $Int):                                  // Preds: bb4 bb1
+  return %21                                      // id: %22
+} // end sil function '$s13loop_patterns17decrementingWhileyS2iF'
+
+// forInRange(_:)
+// Isolation: unspecified
+sil hidden @$s13loop_patterns10forInRangeyS2iF : $@convention(thin) (Int) -> Int {
+[global: ]
+// %0 "n"                                         // users: %4, %1
+bb0(%0 : $Int):
+  debug_value %0, let, name "n", argno 1          // id: %1
+  %2 = integer_literal $Builtin.Int64, 0          // users: %17, %14, %10, %16, %16, %5, %7, %9, %3
+  debug_value %2, var, name "sum", type $Int, expr op_fragment:#Int._value // id: %3
+  %4 = struct_extract %0, #Int._value             // users: %14, %10, %8, %29, %5
+  %5 = builtin "cmp_slt_Int64"(%4, %2) : $Builtin.Int1 // user: %6
+  cond_fail %5, "Range requires lowerBound <= upperBound" // id: %6
+  debug_value %2, var, name "$i$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._elements:op_fragment:#Range.lowerBound:op_fragment:#Int._value // id: %7
+  debug_value %4, var, name "$i$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._elements:op_fragment:#Range.upperBound:op_fragment:#Int._value // id: %8
+  debug_value %2, var, name "$i$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._position:op_fragment:#Int._value // id: %9
+  %10 = builtin "cmp_eq_Int64"(%4, %2) : $Builtin.Int1 // user: %11
+  cond_br %10, bb2, bb1                           // id: %11
+
+bb1:                                              // Preds: bb0
+  %12 = integer_literal $Builtin.Int1, -1         // users: %24, %21
+  %13 = integer_literal $Builtin.Int64, 1         // user: %21
+  %14 = builtin "cmp_sge_Int64"(%2, %4) : $Builtin.Int1 // user: %15
+  cond_fail %14, "loop induction variable overflowed" // id: %15
+  br bb3(%2, %2)                                  // id: %16
+
+bb2:                                              // Preds: bb0
+  br bb6(%2)                                      // id: %17
+
+// %18                                            // user: %24
+// %19                                            // users: %21, %24, %20
+bb3(%18 : $Builtin.Int64, %19 : $Builtin.Int64):  // Preds: bb4 bb1
+  debug_value %19, let, name "i", type $Int, expr op_fragment:#Int._value // id: %20
+  %21 = builtin "sadd_with_overflow_Int64"(%19, %13, %12) : $(Builtin.Int64, Builtin.Int1) // user: %22
+  %22 = tuple_extract %21, 0                      // users: %31, %29, %23
+  debug_value %22, var, name "$i$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._position:op_fragment:#Int._value // id: %23
+  %24 = builtin "sadd_with_overflow_Int64"(%18, %19, %12) : $(Builtin.Int64, Builtin.Int1) // users: %26, %25
+  %25 = tuple_extract %24, 0                      // users: %32, %31, %28
+  %26 = tuple_extract %24, 1                      // user: %27
+  cond_fail %26, "arithmetic overflow"            // id: %27
+  debug_value %25, var, name "sum", type $Int, expr op_fragment:#Int._value // id: %28
+  %29 = builtin "cmp_eq_Int64"(%22, %4) : $Builtin.Int1 // user: %30
+  cond_br %29, bb5, bb4                           // id: %30
+
+bb4:                                              // Preds: bb3
+  br bb3(%25, %22)                                // id: %31
+
+bb5:                                              // Preds: bb3
+  br bb6(%25)                                     // id: %32
+
+// %33                                            // user: %34
+bb6(%33 : $Builtin.Int64):                        // Preds: bb5 bb2
+  %34 = struct $Int (%33)                         // user: %35
+  return %34                                      // id: %35
+} // end sil function '$s13loop_patterns10forInRangeyS2iF'
+
+// forInClosedRange(_:)
+// Isolation: unspecified
+sil hidden @$s13loop_patterns16forInClosedRangeyS2iF : $@convention(thin) (Int) -> Int {
+[global: ]
+// %0 "n"                                         // users: %6, %1
+bb0(%0 : $Int):
+  debug_value %0, let, name "n", argno 1          // id: %1
+  %2 = integer_literal $Builtin.Int64, 0          // users: %17, %18, %3
+  debug_value %2, var, name "sum", type $Int, expr op_fragment:#Int._value // id: %3
+  %4 = integer_literal $Builtin.Int64, 1          // users: %15, %11, %17, %18, %21, %5, %7
+  debug_value %4, var, name "$i$generator", type $IndexingIterator<ClosedRange<Int>>, expr op_fragment:#IndexingIterator._elements:op_fragment:#ClosedRange.lowerBound:op_fragment:#Int._value // id: %5
+  %6 = struct_extract %0, #Int._value             // users: %15, %11, %9, %29, %7
+  %7 = builtin "cmp_slt_Int64"(%6, %4) : $Builtin.Int1 // user: %8
+  cond_fail %7, "Range requires lowerBound <= upperBound" // id: %8
+  debug_value %6, var, name "$i$generator", type $IndexingIterator<ClosedRange<Int>>, expr op_fragment:#IndexingIterator._elements:op_fragment:#ClosedRange.upperBound:op_fragment:#Int._value // id: %9
+  debug_value undef : $ClosedRange<Int>.Index, var, name "$i$generator", type $IndexingIterator<ClosedRange<Int>>, expr op_fragment:#IndexingIterator._position // id: %10
+  %11 = builtin "cmp_eq_Int64"(%6, %4) : $Builtin.Int1 // user: %12
+  cond_br %11, bb2, bb1                           // id: %12
+
+bb1:                                              // Preds: bb0
+  %13 = integer_literal $Builtin.Int1, -1         // users: %24, %21
+  debug_value undef : $ClosedRange<Int>.Index, var, name "$i$generator", type $IndexingIterator<ClosedRange<Int>>, expr op_fragment:#IndexingIterator._position // id: %14
+  %15 = builtin "cmp_sge_Int64"(%4, %6) : $Builtin.Int1 // user: %16
+  cond_fail %15, "loop induction variable overflowed" // id: %16
+  br bb3(%2, %4)                                  // id: %17
+
+bb2:                                              // Preds: bb0
+  br bb6(%2, %4)                                  // id: %18
+
+// %19                                            // user: %24
+// %20                                            // users: %23, %24, %21
+bb3(%19 : $Builtin.Int64, %20 : $Builtin.Int64):  // Preds: bb4 bb1
+  %21 = builtin "sadd_with_overflow_Int64"(%20, %4, %13) : $(Builtin.Int64, Builtin.Int1) // user: %22
+  %22 = tuple_extract %21, 0                      // users: %31, %32, %29
+  debug_value %20, let, name "i", type $Int, expr op_fragment:#Int._value // id: %23
+  %24 = builtin "sadd_with_overflow_Int64"(%19, %20, %13) : $(Builtin.Int64, Builtin.Int1) // users: %26, %25
+  %25 = tuple_extract %24, 0                      // users: %31, %32, %28
+  %26 = tuple_extract %24, 1                      // user: %27
+  cond_fail %26, "arithmetic overflow"            // id: %27
+  debug_value %25, var, name "sum", type $Int, expr op_fragment:#Int._value // id: %28
+  %29 = builtin "cmp_eq_Int64"(%22, %6) : $Builtin.Int1 // user: %30
+  cond_br %29, bb5, bb4                           // id: %30
+
+bb4:                                              // Preds: bb3
+  br bb3(%25, %22)                                // id: %31
+
+bb5:                                              // Preds: bb3
+  br bb6(%25, %22)                                // id: %32
+
+// %33                                            // user: %37
+// %34                                            // users: %35, %37
+bb6(%33 : $Builtin.Int64, %34 : $Builtin.Int64):  // Preds: bb5 bb2
+  debug_value %34, let, name "i", type $Int, expr op_fragment:#Int._value // id: %35
+  %36 = integer_literal $Builtin.Int1, -1         // user: %37
+  %37 = builtin "sadd_with_overflow_Int64"(%33, %34, %36) : $(Builtin.Int64, Builtin.Int1) // users: %39, %38
+  %38 = tuple_extract %37, 0                      // users: %42, %41
+  %39 = tuple_extract %37, 1                      // user: %40
+  cond_fail %39, "arithmetic overflow"            // id: %40
+  %41 = struct $Int (%38)                         // user: %43
+  debug_value %38, var, name "sum", type $Int, expr op_fragment:#Int._value // id: %42
+  return %41                                      // id: %43
+} // end sil function '$s13loop_patterns16forInClosedRangeyS2iF'
+
+// nestedLoops(_:_:)
+// Isolation: unspecified
+sil hidden @$s13loop_patterns11nestedLoopsyS2i_SitF : $@convention(thin) (Int, Int) -> Int {
+[global: ]
+// %0 "rows"                                      // users: %7, %2
+// %1 "cols"                                      // users: %17, %3
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "rows", argno 1       // id: %2
+  debug_value %1, let, name "cols", argno 2       // id: %3
+  %4 = integer_literal $Builtin.Int64, 0          // users: %40, %23, %13, %24, %24, %42, %18, %20, %22, %8, %10, %29, %12, %6, %5
+  %5 = struct $Int (%4)                           // users: %24, %25
+  debug_value %4, var, name "count", type $Int, expr op_fragment:#Int._value // id: %6
+  %7 = struct_extract %0, #Int._value             // users: %13, %11, %61, %30, %8
+  %8 = builtin "cmp_slt_Int64"(%7, %4) : $Builtin.Int1 // user: %9
+  cond_fail %8, "Range requires lowerBound <= upperBound" // id: %9
+  debug_value %4, var, name "$i$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._elements:op_fragment:#Range.lowerBound:op_fragment:#Int._value // id: %10
+  debug_value %7, var, name "$i$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._elements:op_fragment:#Range.upperBound:op_fragment:#Int._value // id: %11
+  debug_value %4, var, name "$i$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._position:op_fragment:#Int._value // id: %12
+  %13 = builtin "cmp_eq_Int64"(%7, %4) : $Builtin.Int1 // user: %14
+  cond_br %13, bb2, bb1                           // id: %14
+
+bb1:                                              // Preds: bb0
+  %15 = integer_literal $Builtin.Int1, -1         // users: %49, %46, %34, %31
+  %16 = integer_literal $Builtin.Int64, 1         // users: %49, %46, %34
+  %17 = struct_extract %1, #Int._value            // users: %40, %23, %21, %55, %18
+  %18 = builtin "cmp_slt_Int64"(%17, %4) : $Builtin.Int1 // user: %19
+  cond_fail %18, "Range requires lowerBound <= upperBound" // id: %19
+  debug_value %4, var, name "$j$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._elements:op_fragment:#Range.lowerBound:op_fragment:#Int._value // id: %20
+  debug_value %17, var, name "$j$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._elements:op_fragment:#Range.upperBound:op_fragment:#Int._value // id: %21
+  debug_value %4, var, name "$j$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._position:op_fragment:#Int._value // id: %22
+  %23 = builtin "cmp_eq_Int64"(%17, %4) : $Builtin.Int1 // user: %39
+  br bb3(%5, %4, %4)                              // id: %24
+
+bb2:                                              // Preds: bb0
+  br bb12(%5)                                     // id: %25
+
+// %26                                            // user: %43
+// %27                                            // users: %43, %42
+// %28                                            // users: %34, %30, %29
+bb3(%26 : $Int, %27 : $Builtin.Int64, %28 : $Builtin.Int64): // Preds: bb10 bb1
+  %29 = builtin "cmp_slt_Int64"(%28, %4) : $Builtin.Int1 // user: %32
+  %30 = builtin "cmp_slt_Int64"(%28, %7) : $Builtin.Int1 // user: %31
+  %31 = builtin "xor_Int1"(%30, %15) : $Builtin.Int1 // user: %32
+  %32 = builtin "or_Int1"(%29, %31) : $Builtin.Int1 // user: %33
+  cond_fail %32, "Index out of bounds"            // id: %33
+  %34 = builtin "sadd_with_overflow_Int64"(%28, %16, %15) : $(Builtin.Int64, Builtin.Int1) // users: %36, %35
+  %35 = tuple_extract %34, 0                      // users: %63, %61, %38
+  %36 = tuple_extract %34, 1                      // user: %37
+  cond_fail %36, "arithmetic overflow"            // id: %37
+  debug_value %35, var, name "$i$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._position:op_fragment:#Int._value // id: %38
+  cond_br %23, bb5, bb4                           // id: %39
+
+bb4:                                              // Preds: bb3
+  %40 = builtin "cmp_sge_Int64"(%4, %17) : $Builtin.Int1 // user: %41
+  cond_fail %40, "loop induction variable overflowed" // id: %41
+  br bb6(%27, %4)                                 // id: %42
+
+bb5:                                              // Preds: bb3
+  br bb9(%26, %27)                                // id: %43
+
+// %44                                            // user: %49
+// %45                                            // user: %46
+bb6(%44 : $Builtin.Int64, %45 : $Builtin.Int64):  // Preds: bb7 bb4
+  %46 = builtin "sadd_with_overflow_Int64"(%45, %16, %15) : $(Builtin.Int64, Builtin.Int1) // user: %47
+  %47 = tuple_extract %46, 0                      // users: %57, %55, %48
+  debug_value %47, var, name "$j$generator", type $IndexingIterator<Range<Int>>, expr op_fragment:#IndexingIterator._position:op_fragment:#Int._value // id: %48
+  %49 = builtin "sadd_with_overflow_Int64"(%44, %16, %15) : $(Builtin.Int64, Builtin.Int1) // users: %51, %50
+  %50 = tuple_extract %49, 0                      // users: %57, %58, %54, %53
+  %51 = tuple_extract %49, 1                      // user: %52
+  cond_fail %51, "arithmetic overflow"            // id: %52
+  %53 = struct $Int (%50)                         // user: %58
+  debug_value %50, var, name "count", type $Int, expr op_fragment:#Int._value // id: %54
+  %55 = builtin "cmp_eq_Int64"(%47, %17) : $Builtin.Int1 // user: %56
+  cond_br %55, bb8, bb7                           // id: %56
+
+bb7:                                              // Preds: bb6
+  br bb6(%50, %47)                                // id: %57
+
+bb8:                                              // Preds: bb6
+  br bb9(%53, %50)                                // id: %58
+
+// %59                                            // users: %63, %64
+// %60                                            // user: %63
+bb9(%59 : $Int, %60 : $Builtin.Int64):            // Preds: bb8 bb5
+  %61 = builtin "cmp_eq_Int64"(%35, %7) : $Builtin.Int1 // user: %62
+  cond_br %61, bb11, bb10                         // id: %62
+
+bb10:                                             // Preds: bb9
+  br bb3(%59, %60, %35)                           // id: %63
+
+bb11:                                             // Preds: bb9
+  br bb12(%59)                                    // id: %64
+
+// %65                                            // user: %66
+bb12(%65 : $Int):                                 // Preds: bb11 bb2
+  return %65                                      // id: %66
+} // end sil function '$s13loop_patterns11nestedLoopsyS2i_SitF'
+
+// stepByTwo(_:)
+// Isolation: unspecified
+sil hidden @$s13loop_patterns9stepByTwoyS2iF : $@convention(thin) (Int) -> Int {
+[global: ]
+// %0 "n"                                         // users: %4, %1
+bb0(%0 : $Int):
+  debug_value %0, let, name "n", argno 1          // id: %1
+  %2 = integer_literal $Builtin.Int64, 0          // users: %7, %10, %5, %3
+  debug_value %2, var, name "i", type $Int, expr op_fragment:#Int._value // id: %3
+  %4 = struct_extract %0, #Int._value             // users: %5, %17
+  %5 = builtin "cmp_slt_Int64"(%2, %4) : $Builtin.Int1 // user: %6
+  cond_br %5, bb2, bb1                            // id: %6
+
+bb1:                                              // Preds: bb0
+  br bb6(%2)                                      // id: %7
+
+bb2:                                              // Preds: bb0
+  %8 = integer_literal $Builtin.Int64, 2          // user: %12
+  %9 = integer_literal $Builtin.Int1, -1          // user: %12
+  br bb3(%2)                                      // id: %10
+
+// %11                                            // user: %12
+bb3(%11 : $Builtin.Int64):                        // Preds: bb5 bb2
+  %12 = builtin "sadd_with_overflow_Int64"(%11, %8, %9) : $(Builtin.Int64, Builtin.Int1) // users: %14, %13
+  %13 = tuple_extract %12, 0                      // users: %19, %20, %17, %16
+  %14 = tuple_extract %12, 1                      // user: %15
+  cond_fail %14, "arithmetic overflow"            // id: %15
+  debug_value %13, var, name "i", type $Int, expr op_fragment:#Int._value // id: %16
+  %17 = builtin "cmp_slt_Int64"(%13, %4) : $Builtin.Int1 // user: %18
+  cond_br %17, bb5, bb4                           // id: %18
+
+bb4:                                              // Preds: bb3
+  br bb6(%13)                                     // id: %19
+
+bb5:                                              // Preds: bb3
+  br bb3(%13)                                     // id: %20
+
+// %21                                            // user: %22
+bb6(%21 : $Builtin.Int64):                        // Preds: bb4 bb1
+  %22 = struct $Int (%21)                         // user: %23
+  return %22                                      // id: %23
+} // end sil function '$s13loop_patterns9stepByTwoyS2iF'
+
+// repeatWhileCountdown(_:)
+// Isolation: unspecified
+sil hidden @$s13loop_patterns20repeatWhileCountdownyS2iF : $@convention(thin) (Int) -> Int {
+[global: ]
+// %0 "n"                                         // users: %20, %2, %1
+bb0(%0 : $Int):
+  debug_value %0, let, name "n", argno 1          // id: %1
+  %2 = struct_extract %0, #Int._value             // users: %4, %8
+  %3 = integer_literal $Builtin.Int64, 0          // users: %16, %4
+  %4 = builtin "cmp_slt_Int64"(%3, %2) : $Builtin.Int1 // user: %5
+  cond_br %4, bb1, bb5                            // id: %5
+
+bb1:                                              // Preds: bb0
+  %6 = integer_literal $Builtin.Int64, 1          // user: %10
+  %7 = integer_literal $Builtin.Int1, -1          // user: %10
+  br bb2(%2)                                      // id: %8
+
+// %9                                             // user: %10
+bb2(%9 : $Builtin.Int64):                         // Preds: bb1 bb3
+  %10 = builtin "ssub_with_overflow_Int64"(%9, %6, %7) : $(Builtin.Int64, Builtin.Int1) // users: %12, %11
+  %11 = tuple_extract %10, 0                      // users: %15, %16, %18, %14
+  %12 = tuple_extract %10, 1                      // user: %13
+  cond_fail %12, "arithmetic overflow"            // id: %13
+  %14 = struct $Int (%11)                         // user: %19
+  debug_value %11, var, name "count", type $Int, expr op_fragment:#Int._value // id: %15
+  %16 = builtin "cmp_slt_Int64"(%3, %11) : $Builtin.Int1 // user: %17
+  cond_br %16, bb3, bb4                           // id: %17
+
+bb3:                                              // Preds: bb2
+  br bb2(%11)                                     // id: %18
+
+bb4:                                              // Preds: bb2
+  br bb6(%14)                                     // id: %19
+
+bb5:                                              // Preds: bb0
+  br bb6(%0)                                      // id: %20
+
+// %21                                            // user: %22
+bb6(%21 : $Int):                                  // Preds: bb5 bb4
+  return %21                                      // id: %22
+} // end sil function '$s13loop_patterns20repeatWhileCountdownyS2iF'
+
+// strideLoop(_:)
+// Isolation: unspecified
+sil hidden @$s13loop_patterns10strideLoopyS2iF : $@convention(thin) (Int) -> Int {
+[global: ]
+// %0 "n"                                         // users: %6, %1
+bb0(%0 : $Int):
+  debug_value %0, let, name "n", argno 1          // id: %1
+  %2 = integer_literal $Builtin.Int64, 0          // users: %12, %15, %15, %10, %5, %9, %3
+  debug_value %2, var, name "sum", type $Int, expr op_fragment:#Int._value // id: %3
+  %4 = integer_literal $Builtin.Int64, 2          // users: %8, %18
+  debug_value %2, var, name "$i$generator", type $StrideToIterator<Int>, expr op_fragment:#StrideToIterator._start:op_fragment:#Int._value // id: %5
+  %6 = struct_extract %0, #Int._value             // users: %10, %33, %7
+  debug_value %6, var, name "$i$generator", type $StrideToIterator<Int>, expr op_fragment:#StrideToIterator._end:op_fragment:#Int._value // id: %7
+  debug_value %4, var, name "$i$generator", type $StrideToIterator<Int>, expr op_fragment:#StrideToIterator._stride:op_fragment:#Int._value // id: %8
+  debug_value %2, var, name "$i$generator", type $StrideToIterator<Int>, expr op_fragment:#StrideToIterator._current:op_tuple_fragment:$(index: Optional<Int>, value: Int):1:op_fragment:#Int._value // id: %9
+  %10 = builtin "cmp_slt_Int64"(%2, %6) : $Builtin.Int1 // user: %11
+  cond_br %10, bb2, bb1                           // id: %11
+
+bb1:                                              // Preds: bb0
+  br bb9(%2)                                      // id: %12
+
+bb2:                                              // Preds: bb0
+  %13 = integer_literal $Builtin.Int1, 0          // user: %18
+  %14 = integer_literal $Builtin.Int1, -1         // user: %28
+  br bb3(%2, %2)                                  // id: %15
+
+// %16                                            // user: %28
+// %17                                            // users: %18, %28, %27
+bb3(%16 : $Builtin.Int64, %17 : $Builtin.Int64):  // Preds: bb8 bb2
+  %18 = builtin "sadd_with_overflow_Int64"(%17, %4, %13) : $(Builtin.Int64, Builtin.Int1) // users: %19, %23
+  %19 = tuple_extract %18, 1                      // user: %20
+  cond_br %19, bb4, bb5                           // id: %20
+
+bb4:                                              // Preds: bb3
+  %21 = integer_literal $Builtin.Int64, 9223372036854775807 // user: %22
+  br bb6(%21)                                     // id: %22
+
+bb5:                                              // Preds: bb3
+  %23 = tuple_extract %18, 0                      // user: %24
+  br bb6(%23)                                     // id: %24
+
+// %25                                            // users: %36, %33, %26
+bb6(%25 : $Builtin.Int64):                        // Preds: bb5 bb4
+  debug_value %25, var, name "$i$generator", type $StrideToIterator<Int>, expr op_fragment:#StrideToIterator._current:op_tuple_fragment:$(index: Optional<Int>, value: Int):1:op_fragment:#Int._value // id: %26
+  debug_value %17, let, name "i", type $Int, expr op_fragment:#Int._value // id: %27
+  %28 = builtin "sadd_with_overflow_Int64"(%16, %17, %14) : $(Builtin.Int64, Builtin.Int1) // users: %30, %29
+  %29 = tuple_extract %28, 0                      // users: %35, %36, %32
+  %30 = tuple_extract %28, 1                      // user: %31
+  cond_fail %30, "arithmetic overflow"            // id: %31
+  debug_value %29, var, name "sum", type $Int, expr op_fragment:#Int._value // id: %32
+  %33 = builtin "cmp_slt_Int64"(%25, %6) : $Builtin.Int1 // user: %34
+  cond_br %33, bb8, bb7                           // id: %34
+
+bb7:                                              // Preds: bb6
+  br bb9(%29)                                     // id: %35
+
+bb8:                                              // Preds: bb6
+  br bb3(%29, %25)                                // id: %36
+
+// %37                                            // user: %38
+bb9(%37 : $Builtin.Int64):                        // Preds: bb7 bb1
+  %38 = struct $Int (%37)                         // user: %39
+  return %38                                      // id: %39
+} // end sil function '$s13loop_patterns10strideLoopyS2iF'
+
+
+
+// Mappings from '#fileID' to '#filePath':
+//   'loop_patterns/loop_patterns.swift' => '/Users/ayates/tSwift/tests/verification/loop_patterns.swift'
+
+

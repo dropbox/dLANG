@@ -1,0 +1,51 @@
+// Test integer truncation bounds checking
+// Swift: let y: Int8 = Int8(x) where x is Int
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// truncateInt: Truncate Int to Int8
+// This has two bounds checks:
+// 1. x >= -128 (Int8.min)
+// 2. x <= 127 (Int8.max)
+sil @truncateInt : $@convention(thin) (Int) -> Int8 {
+bb0(%0 : $Int):
+  %1 = struct_extract %0, #Int._value
+  %2 = integer_literal $Builtin.Int64, -128
+  %3 = builtin "cmp_slt_Int64"(%1, %2) : $Builtin.Int1
+  cond_fail %3, "Not enough bits to represent a signed value"
+  %5 = integer_literal $Builtin.Int64, 127
+  %6 = builtin "cmp_slt_Int64"(%5, %1) : $Builtin.Int1
+  cond_fail %6, "Not enough bits to represent the passed value"
+  %8 = builtin "truncOrBitCast_Int64_Int8"(%1) : $Builtin.Int8
+  %9 = struct $Int8 (%8)
+  return %9
+}
+
+// truncateUInt: Truncate UInt to UInt8
+// This has one bounds check: x <= 255 (UInt8.max)
+sil @truncateUInt : $@convention(thin) (UInt) -> UInt8 {
+bb0(%0 : $UInt):
+  %1 = struct_extract %0, #UInt._value
+  %2 = integer_literal $Builtin.Int64, 255
+  %3 = builtin "cmp_ult_Int64"(%2, %1) : $Builtin.Int1
+  cond_fail %3, "Not enough bits to represent the passed value"
+  %5 = builtin "truncOrBitCast_Int64_Int8"(%1) : $Builtin.Int8
+  %6 = struct $UInt8 (%5)
+  return %6
+}
+
+// truncateToSigned: Truncate UInt to Int8
+// This has one bounds check: x <= 127 (Int8.max for unsigned)
+sil @truncateToSigned : $@convention(thin) (UInt) -> Int8 {
+bb0(%0 : $UInt):
+  %1 = struct_extract %0, #UInt._value
+  %2 = integer_literal $Builtin.Int64, 127
+  %3 = builtin "cmp_ult_Int64"(%2, %1) : $Builtin.Int1
+  cond_fail %3, "Not enough bits to represent the passed value"
+  %5 = builtin "truncOrBitCast_Int64_Int8"(%1) : $Builtin.Int8
+  %6 = struct $Int8 (%5)
+  return %6
+}

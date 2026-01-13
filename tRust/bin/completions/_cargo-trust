@@ -1,0 +1,49 @@
+#compdef cargo-trust
+# Zsh completion for cargo-trust
+# Install by adding to your fpath
+
+_cargo_trust() {
+    local -a trust_opts cargo_cmds output_formats
+
+    trust_opts=(
+        '--no-verify[Disable verification (still uses tRust compiler)]'
+        '--verbose[Enable verbose verification output]'
+        '--profile[Show verification timing breakdown]'
+        '--output-format=[Output format]:format:(human json)'
+        '--help[Show help message]'
+        '-h[Show help message]'
+    )
+
+    cargo_cmds=(
+        'build:Build project with verification'
+        'run:Build and run project with verification'
+        'check:Check project with verification (no codegen)'
+        'test:Run tests with verification'
+        'bench:Run benchmarks with verification'
+        'doc:Build documentation'
+    )
+
+    output_formats=(
+        'human:Human-readable output (default)'
+        'json:JSON output for AI agents and tooling'
+    )
+
+    _arguments -C \
+        '1:command:->command' \
+        '*:option:->options'
+
+    case "$state" in
+        command)
+            _describe -t commands 'cargo-trust commands' cargo_cmds
+            ;;
+        options)
+            _arguments $trust_opts \
+                '--release[Build in release mode]' \
+                '--features=[Enable features]:features:' \
+                '--all-features[Enable all features]' \
+                '*:files:_files -g "*.rs"'
+            ;;
+    esac
+}
+
+_cargo_trust "$@"

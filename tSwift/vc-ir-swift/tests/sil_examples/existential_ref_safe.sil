@@ -1,0 +1,42 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Tests init_existential_ref and open_existential_ref for class-bound protocol existentials
+// These instructions handle reference-type existentials (protocols constrained to AnyObject)
+
+// Class-bound protocol for testing
+protocol ClassProtocol : AnyObject {}
+
+class ConcreteClass : ClassProtocol {}
+
+// wrapClassInProtocol: Wraps a class reference in a protocol existential
+// Uses init_existential_ref to create the existential container
+@_ensures("true")
+func wrapClassInProtocol(_ obj: ConcreteClass) -> ClassProtocol
+
+sil hidden @$s15existential_ref17wrapClassInProtocolyAA0E8Protocol_pAA0D5ClassCF : $@convention(thin) (@guaranteed ConcreteClass) -> @owned ClassProtocol {
+bb0(%0 : $ConcreteClass):
+  debug_value %0, let, name "obj", argno 1
+  strong_retain %0 : $ConcreteClass
+  // Wrap the class reference in the protocol existential
+  %3 = init_existential_ref %0 : $ConcreteClass : $ConcreteClass, $ClassProtocol
+  return %3 : $ClassProtocol
+} // end sil function '$s15existential_ref17wrapClassInProtocolyAA0E8Protocol_pAA0D5ClassCF'
+
+// openProtocol: Opens a class-bound existential to access the underlying reference
+// Uses open_existential_ref to get the underlying class reference
+@_ensures("true")
+func openProtocol(_ proto: ClassProtocol) -> ()
+
+sil hidden @$s15existential_ref12openProtocolyyAA0D0_pF : $@convention(thin) (@guaranteed ClassProtocol) -> () {
+bb0(%0 : $ClassProtocol):
+  debug_value %0, let, name "proto", argno 1
+  // Open the existential to get the underlying class reference
+  %2 = open_existential_ref %0 : $ClassProtocol to $@opened("01234567-89ab-cdef-0123-000000000000", ClassProtocol) Self
+  // Return unit - we just tested the open_existential_ref instruction
+  %3 = tuple ()
+  return %3 : $()
+} // end sil function '$s15existential_ref12openProtocolyyAA0D0_pF'

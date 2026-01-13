@@ -1,0 +1,29 @@
+// SIL test file: Subtraction with constrained inputs (safe from overflow)
+// The @_requires precondition constrains inputs so overflow is impossible.
+// Auto-VC for overflow should PASS because inputs are bounded.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe subtract: inputs bounded to prevent overflow
+// When a and b are both in [0, 1_000_000_000], result is in [-1B, +1B]
+// which is well within Int64 range
+@_requires("a >= 0 && a <= 1000000000 && b >= 0 && b <= 1000000000")
+func safeSub(_ a: Int, _ b: Int) -> Int
+
+sil hidden @safeSub : $@convention(thin) (Int, Int) -> Int {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %4 = struct_extract %0, #Int._value
+  %5 = struct_extract %1, #Int._value
+  %6 = integer_literal $Builtin.Int1, -1
+  %7 = builtin "ssub_with_overflow_Int64"(%4, %5, %6) : $(Builtin.Int64, Builtin.Int1)
+  %8 = tuple_extract %7, 0
+  %9 = tuple_extract %7, 1
+  cond_fail %9, "arithmetic overflow"
+  %11 = struct $Int (%8)
+  return %11
+}

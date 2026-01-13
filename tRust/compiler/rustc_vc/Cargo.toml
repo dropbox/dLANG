@@ -1,0 +1,23 @@
+[package]
+name = "rustc_vc"
+version = "0.1.0"
+edition = "2021"
+description = "Verification Condition generation from MIR for tRust"
+license = "MIT OR Apache-2.0"
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["verification", "rust", "compiler"]
+categories = ["development-tools", "compilers"]
+
+[dependencies]
+vc_ir = { path = "../../vc_ir" }
+trust_z3 = { path = "../../backends/z3" }
+trust_z4 = { path = "../../backends/z4" }
+regex = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# These would be rustc crates in the real implementation
+# rustc_middle = { path = "../rustc_middle" }
+# rustc_hir = { path = "../rustc_hir" }
+# rustc_span = { path = "../rustc_span" }

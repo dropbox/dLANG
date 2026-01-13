@@ -1,0 +1,54 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Tests existential_metatype, init_existential_metatype, and open_existential_metatype
+// These instructions handle metatype existentials (protocol metatypes)
+
+protocol P {}
+
+struct ConcreteType : P {}
+
+// getExistentialMetatype: Extracts the metatype from an existential value
+// Uses existential_metatype to get $@thick P.Type from $*P
+@_ensures("true")
+func getExistentialMetatype(_ p: P) -> P.Type
+
+sil hidden @$s19existential_metatype03getaB0yAA1P_pXpAaC_pF : $@convention(thin) (@in_guaranteed P) -> @thick P.Type {
+bb0(%0 : $*P):
+  debug_value %0, let, name "p", argno 1, expr op_deref
+  // Extract metatype from the existential container
+  %2 = existential_metatype $@thick P.Type, %0 : $*P
+  return %2 : $@thick P.Type
+} // end sil function '$s19existential_metatype03getaB0yAA1P_pXpAaC_pF'
+
+// initExistentialMetatype: Wraps a concrete metatype in a protocol metatype
+// Uses init_existential_metatype to create @thick P.Type from @thick ConcreteType.Type
+@_ensures("true")
+func initExistentialMetatype() -> P.Type
+
+sil hidden @$s19existential_metatype04initaB0AA1P_pXpyF : $@convention(thin) () -> @thick P.Type {
+bb0:
+  // Get the concrete metatype
+  %0 = metatype $@thick ConcreteType.Type
+  // Wrap it in the protocol metatype
+  %1 = init_existential_metatype %0 : $@thick ConcreteType.Type, $@thick P.Type
+  return %1 : $@thick P.Type
+} // end sil function '$s19existential_metatype04initaB0AA1P_pXpyF'
+
+// openExistentialMetatype: Opens a protocol metatype to get the underlying concrete metatype
+// Uses open_existential_metatype to access the concrete metatype inside
+@_ensures("true")
+func openExistentialMetatype(_ meta: P.Type) -> ()
+
+sil hidden @$s19existential_metatype04openaB0yyAA1P_pXpF : $@convention(thin) (@thick P.Type) -> () {
+bb0(%0 : $@thick P.Type):
+  debug_value %0, let, name "meta", argno 1
+  // Open the existential metatype to get the concrete metatype
+  %2 = open_existential_metatype %0 : $@thick P.Type to $@thick (@opened("01234567-89ab-cdef-0123-000000000000", P) Self).Type
+  // Return unit - we just tested the open_existential_metatype instruction
+  %3 = tuple ()
+  return %3 : $()
+} // end sil function '$s19existential_metatype04openaB0yyAA1P_pXpF'

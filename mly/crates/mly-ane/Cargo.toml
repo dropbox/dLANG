@@ -1,0 +1,10 @@
+[package]
+name = "mly-ane"
+version.workspace = true
+edition.workspace = true
+description = "Apple Neural Engine backend for Tensor Forge"
+
+[dependencies]
+mly-core = { workspace = true }
+mly-dsl = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,71 @@
+diff --git a/lib/AST/ASTDumper.cpp b/lib/AST/ASTDumper.cpp
+index bef1826bc5c..562f2cb601d 100644
+--- a/lib/AST/ASTDumper.cpp
++++ b/lib/AST/ASTDumper.cpp
+@@ -5140,9 +5140,27 @@ public:
+   TRIVIAL_ATTR_PRINTER(Nonexhaustive, nonexhaustive)
+   TRIVIAL_ATTR_PRINTER(Concurrent, concurrent)
+   TRIVIAL_ATTR_PRINTER(UnsafeSelfDependentResult, unsafe_self_dependent_result)
++  TRIVIAL_ATTR_PRINTER(Trusted, _trusted)
+ 
+ #undef TRIVIAL_ATTR_PRINTER
+ 
++  // Verification attributes
++  void visitRequiresAttr(RequiresAttr *Attr, Label label) {
++    printCommon(Attr, "_requires_attr", label);
++    printFieldQuoted(Attr->getCondition(), Label::always("condition"));
++    printFoot();
++  }
++  void visitEnsuresAttr(EnsuresAttr *Attr, Label label) {
++    printCommon(Attr, "_ensures_attr", label);
++    printFieldQuoted(Attr->getCondition(), Label::always("condition"));
++    printFoot();
++  }
++  void visitInvariantAttr(InvariantAttr *Attr, Label label) {
++    printCommon(Attr, "_invariant_attr", label);
++    printFieldQuoted(Attr->getCondition(), Label::always("condition"));
++    printFoot();
++  }
++
+   void visitABIAttr(ABIAttr *Attr, Label label) {
+     printCommon(Attr, "abi_attr", label);
+     printRec(Attr->abiDecl, Label::always("decl"));
+diff --git a/lib/AST/Attr.cpp b/lib/AST/Attr.cpp
+index d2f113b9cf6..b1e50b9bfc5 100644
+--- a/lib/AST/Attr.cpp
++++ b/lib/AST/Attr.cpp
+@@ -2055,6 +2055,12 @@ StringRef DeclAttribute::getAttrName() const {
+     return cast<LifetimeAttr>(this)->isUnderscored() ? "_lifetime" : "lifetime";
+   case DeclAttrKind::Nonexhaustive:
+     return "nonexhaustive";
++  case DeclAttrKind::Requires:
++    return "_requires";
++  case DeclAttrKind::Ensures:
++    return "_ensures";
++  case DeclAttrKind::Invariant:
++    return "_invariant";
+   }
+   llvm_unreachable("bad DeclAttrKind");
+ }
+diff --git a/lib/ASTGen/Sources/ASTGen/DeclAttrs.swift b/lib/ASTGen/Sources/ASTGen/DeclAttrs.swift
+index d108a8582bc..4b1036ca996 100644
+--- a/lib/ASTGen/Sources/ASTGen/DeclAttrs.swift
++++ b/lib/ASTGen/Sources/ASTGen/DeclAttrs.swift
+@@ -314,10 +314,16 @@ extension ASTGenVisitor {
+         .Used,
+         .WarnUnqualifiedAccess,
+         .WeakLinked,
+-        .UnsafeSelfDependentResult:
++        .UnsafeSelfDependentResult,
++        .Trusted:
+ 
+         return handle(self.generateSimpleDeclAttr(attribute: node, kind: attrKind!))
+ 
++      // Verification attributes (tSwift)
++      case .Requires, .Ensures, .Invariant:
++        // TODO: Implement verification attribute generation
++        return
++
+       // Modifers.
+       case .AccessControl:
+         // TODO: Diagnose and generateAccessControl().

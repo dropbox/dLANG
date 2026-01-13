@@ -1,0 +1,276 @@
+#!/bin/bash
+# cargo-trust - Cargo subcommand for tRust verified builds
+#
+# Usage: cargo trust [cargo-command] [options]
+#        cargo trust build                    # Build with verification
+#        cargo trust run                      # Run with verification
+#        cargo trust check                    # Check with verification
+#        cargo trust build --output-format=json # JSON output for AI agents
+#        cargo trust build --profile          # Profile verification performance
+#        cargo trust --help
+#
+# This sets RUSTC to trustc so cargo uses the tRust compiler with verification.
+#
+# Cargo.toml Configuration:
+# Add [package.metadata.trust] section to configure verification:
+#
+#   [package.metadata.trust]
+#   verify = true            # Enable/disable verification (default: true)
+#   verbose = false          # Enable verbose output (default: false)
+#   profile = false          # Enable profiling (default: false)
+#   output_format = "human"  # Output format: "human" or "json"
+#   timeout_seconds = 60     # Verification timeout in seconds
+#
+# Command-line flags override Cargo.toml settings.
+
+set -e
+
+# Parse Cargo.toml [package.metadata.trust] section
+# Returns values via global variables: TOML_VERIFY, TOML_VERBOSE, TOML_PROFILE,
+# TOML_OUTPUT_FORMAT, TOML_TIMEOUT
+parse_cargo_toml() {
+    local cargo_toml="$1"
+
+    # Initialize defaults
+    TOML_VERIFY=""
+    TOML_VERBOSE=""
+    TOML_PROFILE=""
+    TOML_OUTPUT_FORMAT=""
+    TOML_TIMEOUT=""
+
+    if [ ! -f "$cargo_toml" ]; then
+        return 0
+    fi
+
+    # Check if [package.metadata.trust] section exists
+    if ! grep -q '^\[package\.metadata\.trust\]' "$cargo_toml" 2>/dev/null; then
+        return 0
+    fi
+
+    # Extract the section (from [package.metadata.trust] to next [section] or EOF)
+    local in_section=0
+    while IFS= read -r line; do
+        # Check for start of our section
+        if [[ "$line" =~ ^\[package\.metadata\.trust\] ]]; then
+            in_section=1
+            continue
+        fi
+        # Check for start of another section
+        if [[ "$line" =~ ^\[.+\] ]]; then
+            in_section=0
+            continue
+        fi
+        # Parse key-value pairs in our section
+        if [ "$in_section" -eq 1 ]; then
+            # Remove comments and trim whitespace
+            local clean_line="${line%%#*}"
+            clean_line="$(echo "$clean_line" | xargs 2>/dev/null || echo "$clean_line")"
+
+            # Skip empty lines
+            [ -z "$clean_line" ] && continue
+
+            # Parse key = value
+            if [[ "$clean_line" =~ ^([a-z_]+)[[:space:]]*=[[:space:]]*(.+)$ ]]; then
+                local key="${BASH_REMATCH[1]}"
+                local value="${BASH_REMATCH[2]}"
+                # Remove quotes from value
+                value="${value%\"}"
+                value="${value#\"}"
+                value="${value%\'}"
+                value="${value#\'}"
+
+                case "$key" in
+                    verify)
+                        TOML_VERIFY="$value"
+                        ;;
+                    verbose)
+                        TOML_VERBOSE="$value"
+                        ;;
+                    profile)
+                        TOML_PROFILE="$value"
+                        ;;
+                    output_format)
+                        TOML_OUTPUT_FORMAT="$value"
+                        ;;
+                    timeout_seconds)
+                        TOML_TIMEOUT="$value"
+                        ;;
+                esac
+            fi
+        fi
+    done < "$cargo_toml"
+}
+
+# Check for conflicting cargo-trust binaries
+OTHER_CARGO_TRUST=$(which -a cargo-trust 2>/dev/null | grep -v "$(dirname "$0")" | head -1)
+if [ -n "$OTHER_CARGO_TRUST" ] && [ -f "$OTHER_CARGO_TRUST" ]; then
+    if file "$OTHER_CARGO_TRUST" | grep -q "Mach-O\|ELF"; then
+        echo "Warning: Found conflicting cargo-trust binary at $OTHER_CARGO_TRUST" >&2
+        echo "This may cause issues. Consider removing it or adjusting PATH." >&2
+    fi
+fi
+
+# Find the script's directory to locate trustc
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRUSTC="$SCRIPT_DIR/trustc"
+
+# Check if trustc exists
+if [ ! -x "$TRUSTC" ]; then
+    echo "Error: trustc not found at $TRUSTC" >&2
+    exit 1
+fi
+
+# Handle help
+if [ "$1" = "--help" ] || [ "$1" = "-h" ] || [ -z "$1" ]; then
+    echo "cargo-trust - Cargo integration for tRust verified builds"
+    echo ""
+    echo "Usage: cargo trust <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  build      Build project with verification"
+    echo "  run        Build and run project with verification"
+    echo "  check      Check project with verification (no codegen)"
+    echo "  test       Run tests with verification"
+    echo ""
+    echo "Options:"
+    echo "  --no-verify           Disable verification (still uses tRust compiler)"
+    echo "  --verbose             Enable verbose verification output"
+    echo "  --profile             Show verification timing breakdown"
+    echo "  --output-format=FMT   Output format: 'human' (default) or 'json'"
+    echo "  --help, -h            Show this help message"
+    echo ""
+    echo "Cargo.toml Configuration:"
+    echo "  Add [package.metadata.trust] to Cargo.toml:"
+    echo ""
+    echo "    [package.metadata.trust]"
+    echo "    verify = true            # Enable/disable verification"
+    echo "    verbose = false          # Enable verbose output"
+    echo "    profile = false          # Enable profiling"
+    echo "    output_format = \"human\"  # \"human\" or \"json\""
+    echo "    timeout_seconds = 60     # Verification timeout"
+    echo ""
+    echo "  Command-line flags override Cargo.toml settings."
+    echo ""
+    echo "Environment:"
+    echo "  TRUST_SYSROOT         Override tRust sysroot for trustc"
+    echo ""
+    echo "Examples:"
+    echo "  cargo trust build                    # Build with verification"
+    echo "  cargo trust run                      # Run with verification"
+    echo "  cargo trust build --release          # Release build with verification"
+    echo "  cargo trust test                     # Run tests with verification"
+    echo "  cargo trust build --profile          # Profile verification performance"
+    echo "  cargo trust build --output-format=json  # JSON output for AI agents"
+    echo ""
+    echo "All other options are passed to cargo."
+    echo ""
+    echo "Verification attributes:"
+    echo "  #[requires(\"cond\")]    - Precondition"
+    echo "  #[ensures(\"cond\")]     - Postcondition"
+    echo "  #[invariant(\"cond\")]   - Loop invariant"
+    exit 0
+fi
+
+# Cargo may invoke external subcommands as: `cargo-<cmd> <cmd> ...`.
+# Accept (and strip) an initial `trust` to avoid `cargo trust` recursion.
+if [ "${1:-}" = "trust" ]; then
+    shift
+fi
+
+# Parse Cargo.toml first (if exists)
+if [ -f "Cargo.toml" ]; then
+    parse_cargo_toml "Cargo.toml"
+fi
+
+# Check for command-line flags (these override Cargo.toml)
+# Flag values: 0=not set by flag, 1=set by flag
+NO_VERIFY_FLAG=0
+VERBOSE_FLAG=0
+PROFILE_FLAG=0
+OUTPUT_FORMAT_FLAG=""
+CARGO_ARGS=()
+NEXT_IS_FORMAT=0
+for arg in "$@"; do
+    if [ "$NEXT_IS_FORMAT" -eq 1 ]; then
+        OUTPUT_FORMAT_FLAG="$arg"
+        NEXT_IS_FORMAT=0
+    elif [ "$arg" = "--no-verify" ]; then
+        NO_VERIFY_FLAG=1
+    elif [ "$arg" = "--verbose" ]; then
+        VERBOSE_FLAG=1
+    elif [ "$arg" = "--profile" ]; then
+        PROFILE_FLAG=1
+    elif [[ "$arg" == --output-format=* ]]; then
+        OUTPUT_FORMAT_FLAG="${arg#*=}"
+    elif [ "$arg" = "--output-format" ]; then
+        NEXT_IS_FORMAT=1
+    else
+        CARGO_ARGS+=("$arg")
+    fi
+done
+
+# Resolve settings: CLI flags > Cargo.toml > defaults
+# verify: default true, --no-verify sets false, Cargo.toml can set false
+NO_VERIFY=0
+if [ "$NO_VERIFY_FLAG" -eq 1 ]; then
+    NO_VERIFY=1
+elif [ "$TOML_VERIFY" = "false" ]; then
+    NO_VERIFY=1
+fi
+
+# verbose: default false, --verbose or Cargo.toml can enable
+VERBOSE=0
+if [ "$VERBOSE_FLAG" -eq 1 ]; then
+    VERBOSE=1
+elif [ "$TOML_VERBOSE" = "true" ]; then
+    VERBOSE=1
+fi
+
+# profile: default false, --profile or Cargo.toml can enable
+PROFILE=0
+if [ "$PROFILE_FLAG" -eq 1 ]; then
+    PROFILE=1
+elif [ "$TOML_PROFILE" = "true" ]; then
+    PROFILE=1
+fi
+
+# output_format: CLI > env > Cargo.toml > "human"
+if [ -n "$OUTPUT_FORMAT_FLAG" ]; then
+    OUTPUT_FORMAT="$OUTPUT_FORMAT_FLAG"
+elif [ -n "${TRUST_OUTPUT_FORMAT:-}" ]; then
+    OUTPUT_FORMAT="$TRUST_OUTPUT_FORMAT"
+elif [ -n "$TOML_OUTPUT_FORMAT" ]; then
+    OUTPUT_FORMAT="$TOML_OUTPUT_FORMAT"
+else
+    OUTPUT_FORMAT="human"
+fi
+
+# timeout: Cargo.toml only (no CLI flag for this)
+TIMEOUT="${TOML_TIMEOUT:-}"
+
+# Always use trustc as the compiler; --no-verify controls whether trustc enables -Zverify.
+export RUSTC="$TRUSTC"
+export TRUST_OUTPUT_FORMAT="$OUTPUT_FORMAT"
+
+if [ "$NO_VERIFY" -eq 1 ]; then
+    export TRUST_VERIFY=0
+else
+    export TRUST_VERIFY=1
+
+    # Set profiling environment variable
+    if [ "$PROFILE" -eq 1 ]; then
+        export TRUST_VERIFY_PROFILE=1
+    fi
+
+    # Set verbose environment variable
+    if [ "$VERBOSE" -eq 1 ]; then
+        export TRUST_VERIFY_VERBOSE=1
+    fi
+
+    # Set timeout if specified
+    if [ -n "$TIMEOUT" ]; then
+        export TRUST_VERIFY_TIMEOUT="$TIMEOUT"
+    fi
+fi
+
+exec cargo "${CARGO_ARGS[@]}"

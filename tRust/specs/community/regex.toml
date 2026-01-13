@@ -1,0 +1,116 @@
+# Specifications for the regex crate
+# https://crates.io/crates/regex
+
+[crate]
+name = "regex"
+version = "1.10"
+trust_level = "audited"
+
+# Regex::new - compile a pattern, may fail on invalid regex
+[[function]]
+name = "regex::Regex::new"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false
+
+# Regex::is_match - check if pattern matches text
+[[method]]
+name = "regex::Regex::is_match"
+preconditions = []
+postconditions = []
+pure = true
+
+# Regex::find - find first match in text
+[[method]]
+name = "regex::Regex::find"
+preconditions = []
+postconditions = []
+pure = true
+
+# Regex::find_iter - iterate over all matches
+[[method]]
+name = "regex::Regex::find_iter"
+preconditions = []
+postconditions = []
+pure = true
+
+# Regex::captures - capture groups for first match
+[[method]]
+name = "regex::Regex::captures"
+preconditions = []
+postconditions = []
+pure = true
+
+# Regex::captures_iter - iterate over all capture groups
+[[method]]
+name = "regex::Regex::captures_iter"
+preconditions = []
+postconditions = []
+pure = true
+
+# Regex::split - split text on pattern
+[[method]]
+name = "regex::Regex::split"
+preconditions = []
+postconditions = []
+pure = true
+
+# Regex::replace - replace first match
+[[method]]
+name = "regex::Regex::replace"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false
+
+# Regex::replace_all - replace all matches
+[[method]]
+name = "regex::Regex::replace_all"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false
+
+# RegexBuilder::new - create builder for pattern
+[[function]]
+name = "regex::RegexBuilder::new"
+preconditions = []
+postconditions = []
+pure = true
+
+# RegexBuilder::build - compile the pattern
+[[method]]
+name = "regex::RegexBuilder::build"
+preconditions = []
+postconditions = []
+effects = ["Alloc"]
+pure = false
+
+# RegexBuilder::case_insensitive - set case insensitivity
+[[method]]
+name = "regex::RegexBuilder::case_insensitive"
+preconditions = []
+postconditions = []
+pure = true
+
+# RegexBuilder::multi_line - set multi-line mode
+[[method]]
+name = "regex::RegexBuilder::multi_line"
+preconditions = []
+postconditions = []
+pure = true
+
+# RegexBuilder::dot_matches_new_line - set dot-matches-newline
+[[method]]
+name = "regex::RegexBuilder::dot_matches_new_line"
+preconditions = []
+postconditions = []
+pure = true
+
+# RegexBuilder::size_limit - set compiled regex size limit
+[[method]]
+name = "regex::RegexBuilder::size_limit"
+preconditions = ["(> arg0 0)"]
+postconditions = []
+pure = true

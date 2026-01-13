@@ -1,0 +1,843 @@
+#!/bin/bash
+# trustc - tRust compiler wrapper
+# Automatically sets the sysroot and enables verification
+#
+# Usage: trustc [options] <source.rs>
+#        trustc --help
+#        trustc --explain ERROR_CODE
+#
+# Examples:
+#   trustc hello.rs                      # Compile with verification
+#   trustc -o myprogram hello.rs         # Compile to specific output
+#   trustc --no-verify hello.rs          # Compile without verification
+#   trustc --verify-verbose hello.rs     # Verbose verification output
+#   trustc --output-format=json hello.rs # JSON output for AI agents
+#   trustc --profile hello.rs            # Profile verification performance
+#   trustc --explain E0900               # Explain verification error
+#   trustc --no-cache hello.rs           # Skip verification cache
+#   trustc --cache-clear                 # Clear the verification cache
+
+set -e
+
+# Find the script's directory to locate the build
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRUST_ROOT="$(dirname "$SCRIPT_DIR")"
+EXPLANATIONS_FILE="$SCRIPT_DIR/error_explanations.txt"
+
+# Cache directories
+# Project-local cache (per-project, in current directory)
+PROJECT_CACHE_DIR="${TRUST_CACHE_DIR:-.trust_cache}"
+# Global cache (shared across all projects)
+DEFAULT_GLOBAL_CACHE="${HOME}/.cache/trust"
+GLOBAL_CACHE_DIR="${TRUST_GLOBAL_CACHE_DIR:-$DEFAULT_GLOBAL_CACHE}"
+
+# Which cache directory to use (defaults to project cache)
+CACHE_DIR="$PROJECT_CACHE_DIR"
+
+# Whether to use global cache (enabled via --use-global-cache or TRUST_USE_GLOBAL_CACHE=1)
+USE_GLOBAL_CACHE="${TRUST_USE_GLOBAL_CACHE:-0}"
+
+# Global function cache files (store function results by hash alone, independent of file)
+# This allows the same function to be reused across different files and projects
+GLOBAL_FUNC_CACHE_PROJECT="$PROJECT_CACHE_DIR/global_functions"
+GLOBAL_FUNC_CACHE_SHARED="$GLOBAL_CACHE_DIR/global_functions"
+
+# Compute content hash for a file (SHA256)
+compute_file_hash() {
+    local file="$1"
+    if [ -f "$file" ]; then
+        if command -v sha256sum &>/dev/null; then
+            sha256sum "$file" | cut -d' ' -f1
+        elif command -v shasum &>/dev/null; then
+            shasum -a 256 "$file" | cut -d' ' -f1
+        else
+            # Fallback: use file mtime and size
+            stat -f "%m-%z" "$file" 2>/dev/null || stat --format="%Y-%s" "$file" 2>/dev/null
+        fi
+    fi
+}
+
+# Get cache key for a source file (hash of content + compiler version)
+get_cache_key() {
+    local file="$1"
+    local file_hash
+    file_hash=$(compute_file_hash "$file")
+    # Include a compiler version marker to invalidate on compiler changes
+    local compiler_version
+    compiler_version=$("$RUSTC" --version 2>/dev/null | head -1 || echo "unknown")
+    if command -v sha256sum &>/dev/null; then
+        echo "${file_hash}_${compiler_version}" | sha256sum | cut -d' ' -f1
+    else
+        echo "${file_hash}_${compiler_version}" | shasum -a 256 | cut -d' ' -f1
+    fi
+}
+
+# Check if verification result is cached (checks project cache, then global cache)
+# Sets CACHE_HIT_SOURCE to "project" or "global" on hit
+CACHE_HIT_SOURCE=""
+check_cache() {
+    local source_file="$1"
+    local cache_key
+    cache_key=$(get_cache_key "$source_file")
+
+    # Check project cache first
+    local project_cache_file="$PROJECT_CACHE_DIR/$cache_key"
+    if [ -f "$project_cache_file" ]; then
+        local cached_result
+        cached_result=$(cat "$project_cache_file")
+        if [ "$cached_result" = "verified" ]; then
+            CACHE_HIT_SOURCE="project"
+            return 0  # Cache hit - verified
+        fi
+    fi
+
+    # Check global cache if enabled
+    if [ "$USE_GLOBAL_CACHE" = "1" ]; then
+        local global_cache_file="$GLOBAL_CACHE_DIR/$cache_key"
+        if [ -f "$global_cache_file" ]; then
+            local cached_result
+            cached_result=$(cat "$global_cache_file")
+            if [ "$cached_result" = "verified" ]; then
+                CACHE_HIT_SOURCE="global"
+                # Copy to project cache for faster future lookups
+                mkdir -p "$PROJECT_CACHE_DIR"
+                cp "$global_cache_file" "$project_cache_file" 2>/dev/null || true
+                [ -f "${global_cache_file}.meta" ] && cp "${global_cache_file}.meta" "${project_cache_file}.meta" 2>/dev/null || true
+                return 0  # Cache hit - verified
+            fi
+        fi
+    fi
+
+    CACHE_HIT_SOURCE=""
+    return 1  # Cache miss or failed
+}
+
+# Store verification result in cache (stores to project cache, and global if enabled)
+store_cache() {
+    local source_file="$1"
+    local result="$2"  # "verified" or "failed"
+    local cache_key
+    cache_key=$(get_cache_key "$source_file")
+    local timestamp
+    timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    # Always store to project cache
+    mkdir -p "$PROJECT_CACHE_DIR"
+    echo "$result" > "$PROJECT_CACHE_DIR/$cache_key"
+    {
+        echo "file=$source_file"
+        echo "timestamp=$timestamp"
+        echo "result=$result"
+    } > "$PROJECT_CACHE_DIR/$cache_key.meta"
+
+    # Also store to global cache if enabled
+    if [ "$USE_GLOBAL_CACHE" = "1" ]; then
+        mkdir -p "$GLOBAL_CACHE_DIR"
+        echo "$result" > "$GLOBAL_CACHE_DIR/$cache_key"
+        {
+            echo "file=$source_file"
+            echo "timestamp=$timestamp"
+            echo "result=$result"
+            echo "project=$(pwd)"
+        } > "$GLOBAL_CACHE_DIR/$cache_key.meta"
+    fi
+}
+
+# Clear the verification cache
+# With --global flag, also clears global cache
+CLEAR_GLOBAL_CACHE=0
+clear_cache() {
+    local cleared=0
+
+    # Clear project cache
+    if [ -d "$PROJECT_CACHE_DIR" ]; then
+        rm -rf "$PROJECT_CACHE_DIR"
+        echo "Project cache cleared: $PROJECT_CACHE_DIR"
+        cleared=1
+    fi
+
+    # Clear global cache if requested
+    if [ "$CLEAR_GLOBAL_CACHE" = "1" ] && [ -d "$GLOBAL_CACHE_DIR" ]; then
+        rm -rf "$GLOBAL_CACHE_DIR"
+        echo "Global cache cleared: $GLOBAL_CACHE_DIR"
+        cleared=1
+    fi
+
+    if [ $cleared -eq 0 ]; then
+        echo "No cache directory found at: $PROJECT_CACHE_DIR"
+        if [ "$CLEAR_GLOBAL_CACHE" = "1" ]; then
+            echo "No global cache directory found at: $GLOBAL_CACHE_DIR"
+        fi
+    fi
+}
+
+# Load function-level cache for a source file
+# Returns JSON format: {"hash1": "verified", "hash2": "disproven", ...}
+# Merges: file-specific cache + project global function cache + shared global function cache
+load_function_cache() {
+    local source_file="$1"
+    local cache_key
+    cache_key=$(get_cache_key "$source_file")
+    local func_cache_file="$PROJECT_CACHE_DIR/${cache_key}.functions"
+
+    # Use temp file to merge all caches (later entries override earlier)
+    local merged=$(mktemp)
+
+    # Load shared global function cache first (lowest priority)
+    if [ "$USE_GLOBAL_CACHE" = "1" ] && [ -f "$GLOBAL_FUNC_CACHE_SHARED" ]; then
+        cat "$GLOBAL_FUNC_CACHE_SHARED" >> "$merged"
+    fi
+
+    # Load project-wide global function cache (medium priority)
+    if [ -f "$GLOBAL_FUNC_CACHE_PROJECT" ]; then
+        cat "$GLOBAL_FUNC_CACHE_PROJECT" >> "$merged"
+    fi
+
+    # Load file-specific function cache last (highest priority)
+    if [ -f "$func_cache_file" ]; then
+        cat "$func_cache_file" >> "$merged"
+    fi
+
+    # Convert to JSON, deduplicating (last entry wins)
+    if [ -s "$merged" ]; then
+        # Build JSON with deduplication using awk
+        local json="{"
+        local first=1
+        # Use awk to keep only the last occurrence of each hash
+        while IFS='=' read -r hash result; do
+            [ -z "$hash" ] && continue
+            if [ $first -eq 1 ]; then
+                first=0
+            else
+                json+=","
+            fi
+            json+="\"$hash\":\"$result\""
+        done < <(awk -F= '{ data[$1]=$2 } END { for (k in data) print k"="data[k] }' "$merged")
+        json+="}"
+        rm -f "$merged"
+        echo "$json"
+    else
+        rm -f "$merged"
+        echo "{}"
+    fi
+}
+
+# Update function-level cache from JSON output
+# Expects JSON with "functions" array containing objects with "function_hash" and "status" fields
+# Updates: file-specific cache, project global function cache, and shared global function cache
+update_function_cache_from_json() {
+    local source_file="$1"
+    local json_output="$2"
+    local cache_key
+    cache_key=$(get_cache_key "$source_file")
+    local func_cache_file="$PROJECT_CACHE_DIR/${cache_key}.functions"
+
+    mkdir -p "$PROJECT_CACHE_DIR"
+
+    # Parse JSON and extract function_hash -> status mappings
+    local new_entries=$(mktemp)
+    echo "$json_output" | tr '\n' ' ' | sed 's/},/}\n/g' | while read -r line; do
+        if echo "$line" | grep -q '"function_hash"'; then
+            hash=$(echo "$line" | sed -n 's/.*"function_hash"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+            status=$(echo "$line" | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+            if [ -n "$hash" ] && [ "$hash" != "null" ] && [ -n "$status" ]; then
+                echo "${hash}=${status}"
+            fi
+        fi
+    done > "$new_entries"
+
+    # Update file-specific function cache
+    cp "$new_entries" "$func_cache_file"
+
+    # Update project-wide global function cache (merge with existing)
+    if [ -s "$new_entries" ]; then
+        local temp_global=$(mktemp)
+        if [ -f "$GLOBAL_FUNC_CACHE_PROJECT" ]; then
+            cat "$GLOBAL_FUNC_CACHE_PROJECT" > "$temp_global"
+        fi
+        cat "$new_entries" >> "$temp_global"
+        # Deduplicate: keep last occurrence (newer results override older)
+        awk -F= '{ data[$1]=$2 } END { for (k in data) print k"="data[k] }' "$temp_global" > "$GLOBAL_FUNC_CACHE_PROJECT"
+        rm -f "$temp_global"
+    fi
+
+    # Update shared global function cache if enabled
+    if [ "$USE_GLOBAL_CACHE" = "1" ] && [ -s "$new_entries" ]; then
+        mkdir -p "$GLOBAL_CACHE_DIR"
+        local temp_shared=$(mktemp)
+        if [ -f "$GLOBAL_FUNC_CACHE_SHARED" ]; then
+            cat "$GLOBAL_FUNC_CACHE_SHARED" > "$temp_shared"
+        fi
+        cat "$new_entries" >> "$temp_shared"
+        # Deduplicate
+        awk -F= '{ data[$1]=$2 } END { for (k in data) print k"="data[k] }' "$temp_shared" > "$GLOBAL_FUNC_CACHE_SHARED"
+        rm -f "$temp_shared"
+    fi
+
+    rm -f "$new_entries"
+}
+
+# Show cache statistics
+show_cache_stats() {
+    echo "Verification Cache Statistics"
+    echo "=============================="
+    echo ""
+    echo "Project cache: $PROJECT_CACHE_DIR"
+    echo "Global cache:  $GLOBAL_CACHE_DIR"
+    echo ""
+
+    # Project file-level cache stats
+    local project_files=0
+    local project_verified=0
+    local project_failed=0
+    if [ -d "$PROJECT_CACHE_DIR" ]; then
+        for f in "$PROJECT_CACHE_DIR"/*; do
+            [ -f "$f" ] || continue
+            [[ "$f" =~ \.meta$ ]] && continue
+            [[ "$f" =~ \.functions$ ]] && continue
+            [[ "$f" =~ global_functions$ ]] && continue
+            project_files=$((project_files + 1))
+            local content=$(cat "$f")
+            [ "$content" = "verified" ] && project_verified=$((project_verified + 1))
+            [ "$content" = "failed" ] && project_failed=$((project_failed + 1))
+        done
+    fi
+    echo "Project file-level cache:"
+    echo "  Total entries:   $project_files"
+    echo "  Verified:        $project_verified"
+    echo "  Failed:          $project_failed"
+    echo ""
+
+    # Project global function cache stats
+    local project_funcs=0
+    local project_func_verified=0
+    local project_func_failed=0
+    if [ -f "$GLOBAL_FUNC_CACHE_PROJECT" ]; then
+        while IFS='=' read -r hash status; do
+            [ -z "$hash" ] && continue
+            project_funcs=$((project_funcs + 1))
+            [ "$status" = "verified" ] && project_func_verified=$((project_func_verified + 1))
+            [[ "$status" =~ ^(failed|disproven)$ ]] && project_func_failed=$((project_func_failed + 1))
+        done < "$GLOBAL_FUNC_CACHE_PROJECT"
+    fi
+    echo "Project global function cache:"
+    echo "  Total entries:   $project_funcs"
+    echo "  Verified:        $project_func_verified"
+    echo "  Failed:          $project_func_failed"
+    echo ""
+
+    # Global shared cache stats
+    if [ -d "$GLOBAL_CACHE_DIR" ]; then
+        local global_files=0
+        local global_verified=0
+        local global_failed=0
+        for f in "$GLOBAL_CACHE_DIR"/*; do
+            [ -f "$f" ] || continue
+            [[ "$f" =~ \.meta$ ]] && continue
+            [[ "$f" =~ \.functions$ ]] && continue
+            [[ "$f" =~ global_functions$ ]] && continue
+            global_files=$((global_files + 1))
+            local content=$(cat "$f")
+            [ "$content" = "verified" ] && global_verified=$((global_verified + 1))
+            [ "$content" = "failed" ] && global_failed=$((global_failed + 1))
+        done
+        echo "Shared file-level cache:"
+        echo "  Total entries:   $global_files"
+        echo "  Verified:        $global_verified"
+        echo "  Failed:          $global_failed"
+        echo ""
+
+        local shared_funcs=0
+        local shared_func_verified=0
+        local shared_func_failed=0
+        if [ -f "$GLOBAL_FUNC_CACHE_SHARED" ]; then
+            while IFS='=' read -r hash status; do
+                [ -z "$hash" ] && continue
+                shared_funcs=$((shared_funcs + 1))
+                [ "$status" = "verified" ] && shared_func_verified=$((shared_func_verified + 1))
+                [[ "$status" =~ ^(failed|disproven)$ ]] && shared_func_failed=$((shared_func_failed + 1))
+            done < "$GLOBAL_FUNC_CACHE_SHARED"
+        fi
+        echo "Shared global function cache:"
+        echo "  Total entries:   $shared_funcs"
+        echo "  Verified:        $shared_func_verified"
+        echo "  Failed:          $shared_func_failed"
+    else
+        echo "Shared cache: not initialized"
+    fi
+}
+
+# Enable function-level caching (only useful when file-level cache is invalid)
+USE_FUNCTION_CACHE=1
+
+# Function to explain an error code
+explain_error() {
+    local code="$1"
+
+    if [ ! -f "$EXPLANATIONS_FILE" ]; then
+        echo "Error: explanations file not found at $EXPLANATIONS_FILE" >&2
+        exit 1
+    fi
+
+    # Search for the error code in the explanations file
+    local found=0
+    while IFS='|' read -r err_code short_desc long_desc; do
+        # Skip comments and empty lines
+        [[ "$err_code" =~ ^#.*$ || -z "$err_code" ]] && continue
+
+        if [ "$err_code" = "$code" ]; then
+            found=1
+            echo ""
+            echo "Error code: $code"
+            echo "============================================"
+            echo ""
+            echo "Short: $short_desc"
+            echo ""
+            echo "Explanation:"
+            echo ""
+            # Convert \n to actual newlines and print
+            echo -e "$long_desc"
+            echo ""
+            break
+        fi
+    done < "$EXPLANATIONS_FILE"
+
+    if [ $found -eq 0 ]; then
+        echo "Error: unknown error code '$code'" >&2
+        echo "" >&2
+        echo "Available tRust verification error codes:" >&2
+        echo "  E0900 - verification condition not provable" >&2
+        echo "  E0901 - termination not proven" >&2
+        echo "  E0902 - temporal property violated" >&2
+        echo "  E0903 - precondition not established" >&2
+        echo "  E0904 - invariant not preserved" >&2
+        echo "  E0905 - refinement type mismatch" >&2
+        echo "  E0906 - arithmetic overflow possible" >&2
+        echo "  E0907 - division by zero possible" >&2
+        echo "  E0908 - array index out of bounds" >&2
+        echo "  E0909 - unsafe block requires proof" >&2
+        echo "" >&2
+        echo "Run 'trustc --explain CODE' for details." >&2
+        exit 1
+    fi
+}
+
+# Sysroot location (build output)
+DEFAULT_SYSROOT="$TRUST_ROOT/build/host/stage1"
+SYSROOT="${TRUST_SYSROOT:-$DEFAULT_SYSROOT}"
+RUSTC="$SYSROOT/bin/rustc"
+
+# Check if rustc exists
+if [ ! -x "$RUSTC" ]; then
+    echo "Error: tRust compiler not found at $RUSTC" >&2
+    if [ -n "${TRUST_SYSROOT:-}" ]; then
+        echo "TRUST_SYSROOT is set to: $TRUST_SYSROOT" >&2
+    fi
+    echo "Please build tRust first: cd upstream/rustc && ./x build --stage 1" >&2
+    exit 1
+fi
+
+# Check whether this rustc supports -Zverify (tRust-patched rustc only).
+rustc_supports_zverify() {
+    # Avoid matching unrelated flags like verify-llvm-ir.
+    "$RUSTC" -Z help 2>/dev/null | grep -Eq '^[[:space:]]*-Z[[:space:]]+verify(=|[[:space:]])'
+}
+
+# Parse arguments
+# Default verification behavior can be controlled via environment variables:
+# - TRUST_VERIFY=0 disables verification
+# - TRUST_VERIFY=1 forces verification
+# - TRUST_NO_VERIFY=1 disables verification (legacy/alias)
+VERIFY=1
+if [ "${TRUST_VERIFY:-}" = "0" ]; then
+    VERIFY=0
+elif [ "${TRUST_VERIFY:-}" = "1" ]; then
+    VERIFY=1
+elif [ "${TRUST_NO_VERIFY:-}" = "1" ]; then
+    VERIFY=0
+fi
+VERBOSE=0
+PROFILE=0
+HAS_SYSROOT=0
+USE_CACHE=1
+OUTPUT_FORMAT=""
+EXTRACT_STATE_MACHINES=0
+EXTRACT_OUTPUT=""
+ARGS=()
+SOURCE_FILE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --explain)
+            shift
+            if [[ $# -eq 0 ]]; then
+                echo "Error: --explain requires an error code (e.g., E0900)" >&2
+                exit 2
+            fi
+            explain_error "$1"
+            exit 0
+            ;;
+        --no-verify)
+            VERIFY=0
+            shift
+            ;;
+        --verify-verbose)
+            VERIFY=1
+            VERBOSE=1
+            shift
+            ;;
+        --profile)
+            PROFILE=1
+            shift
+            ;;
+        --no-cache)
+            USE_CACHE=0
+            USE_FUNCTION_CACHE=0
+            shift
+            ;;
+        --no-function-cache)
+            USE_FUNCTION_CACHE=0
+            shift
+            ;;
+        --cache-clear)
+            clear_cache
+            exit 0
+            ;;
+        --use-global-cache)
+            USE_GLOBAL_CACHE=1
+            shift
+            ;;
+        --global-cache-clear)
+            CLEAR_GLOBAL_CACHE=1
+            clear_cache
+            exit 0
+            ;;
+        --cache-stats)
+            show_cache_stats
+            exit 0
+            ;;
+        --spec-lockfile=*)
+            # Set spec lockfile for compatibility checking (Phase 2.5.4)
+            export TRUST_SPEC_LOCKFILE="${1#*=}"
+            shift
+            ;;
+        --spec-lockfile)
+            shift
+            if [[ $# -eq 0 ]]; then
+                echo "Error: --spec-lockfile requires a path" >&2
+                exit 2
+            fi
+            export TRUST_SPEC_LOCKFILE="$1"
+            shift
+            ;;
+        --write-spec-lockfile=*)
+            # Write spec lockfile after verification (Phase 2.5.4)
+            export TRUST_WRITE_SPEC_LOCKFILE="${1#*=}"
+            shift
+            ;;
+        --write-spec-lockfile)
+            shift
+            if [[ $# -eq 0 ]]; then
+                echo "Error: --write-spec-lockfile requires a path" >&2
+                exit 2
+            fi
+            export TRUST_WRITE_SPEC_LOCKFILE="$1"
+            shift
+            ;;
+        --output-format=*)
+            OUTPUT_FORMAT="${1#*=}"
+            shift
+            ;;
+        --output-format)
+            shift
+            if [[ $# -eq 0 ]]; then
+                echo "Error: --output-format requires a value (human or json)" >&2
+                exit 2
+            fi
+            OUTPUT_FORMAT="$1"
+            shift
+            ;;
+        --extract-state-machines)
+            # Phase 6.1: Extract async state machines as TLA2 JSON
+            EXTRACT_STATE_MACHINES=1
+            shift
+            ;;
+        --extract-state-machines=*)
+            EXTRACT_STATE_MACHINES=1
+            EXTRACT_OUTPUT="${1#*=}"
+            shift
+            ;;
+        --sysroot)
+            HAS_SYSROOT=1
+            ARGS+=("$1")
+            shift
+            if [[ $# -eq 0 ]]; then
+                echo "Error: --sysroot requires a value" >&2
+                exit 2
+            fi
+            ARGS+=("$1")
+            shift
+            ;;
+        --sysroot=*)
+            HAS_SYSROOT=1
+            ARGS+=("$1")
+            shift
+            ;;
+        --help|-h)
+            echo "trustc - tRust compiler with built-in verification"
+            echo ""
+            echo "Usage: trustc [options] <source.rs>"
+            echo "       trustc --explain ERROR_CODE"
+            echo "       trustc --cache-clear"
+            echo "       trustc --cache-stats"
+            echo ""
+            echo "Options:"
+            echo "  --no-verify           Compile without running verification"
+            echo "  --verify-verbose      Enable verbose verification output"
+            echo "  --profile             Show verification timing breakdown"
+            echo "  --output-format=FMT   Output format: 'human' (default) or 'json'"
+            echo "  --no-cache            Disable all verification caching"
+            echo "  --no-function-cache   Disable function-level caching only"
+            echo "  --cache-clear         Clear the project verification cache and exit"
+            echo "  --use-global-cache    Enable global cache shared across projects"
+            echo "  --global-cache-clear  Clear both project and global caches and exit"
+            echo "  --cache-stats         Show verification cache statistics"
+            echo "  --spec-lockfile=PATH  Load expected spec_hashes for compatibility check"
+            echo "  --write-spec-lockfile=PATH  Write spec_hashes to lockfile after verification"
+            echo "  --extract-state-machines    Extract async state machines as TLA2 JSON"
+            echo "  --extract-state-machines=FILE  Extract to specific file (default: stdout)"
+            echo "  --explain CODE        Explain a verification error code (e.g., E0900)"
+            echo "  --help, -h            Show this help message"
+            echo ""
+            echo "Environment:"
+            echo "  TRUST_SYSROOT             Override sysroot (default: $DEFAULT_SYSROOT)"
+            echo "  TRUST_CACHE_DIR           Project cache directory (default: .trust_cache)"
+            echo "  TRUST_GLOBAL_CACHE_DIR    Global cache directory (default: $DEFAULT_GLOBAL_CACHE)"
+            echo "  TRUST_USE_GLOBAL_CACHE    Set to 1 to enable global caching by default"
+            echo "  TRUST_SPEC_LOCKFILE       Path to spec lockfile for compatibility checking"
+            echo "  TRUST_WRITE_SPEC_LOCKFILE Path to write spec_hashes after verification"
+            echo "  TRUST_SKIP_AUTO_CHECKS    Set to 1 to skip auto overflow/bounds checks"
+            echo "  TRUST_EXTRACT_STATE_MACHINES  Set to 1 to extract async state machines"
+            echo "  TRUST_EXTRACT_OUTPUT      Path to write extracted state machines"
+            echo ""
+            echo "All other options are passed directly to rustc."
+            echo ""
+            echo "Examples:"
+            echo "  trustc hello.rs                      # Compile with verification"
+            echo "  trustc -o myprogram hello.rs         # Compile to specific output"
+            echo "  trustc --no-verify hello.rs          # Compile without verification"
+            echo "  trustc --profile hello.rs            # Profile verification performance"
+            echo "  trustc --output-format=json hello.rs # JSON output for AI agents"
+            echo "  trustc --explain E0900               # Explain verification error"
+            echo "  trustc --no-cache hello.rs           # Skip all caching"
+            echo "  trustc --no-function-cache hello.rs  # Skip function-level cache only"
+            echo "  trustc --cache-clear                 # Clear project cache"
+            echo "  trustc --use-global-cache hello.rs   # Use global cache for reuse"
+            echo "  trustc --global-cache-clear          # Clear all caches"
+            echo "  trustc --cache-stats                 # Show cache statistics"
+            echo "  trustc --write-spec-lockfile=Trust.lock main.rs  # Generate spec lockfile"
+            echo "  trustc --spec-lockfile=Trust.lock main.rs        # Check spec compatibility"
+            echo "  trustc --extract-state-machines async.rs         # Extract async state machines"
+            echo "  trustc --extract-state-machines=sm.json async.rs # Extract to file"
+            echo "  TRUST_SKIP_AUTO_CHECKS=1 trustc lib.rs            # Skip auto overflow/bounds checks"
+            echo ""
+            echo "Caching:"
+            echo "  trustc maintains a two-level cache for verification results:"
+            echo "    1. File-level: Caches whole-file verification by content hash"
+            echo "    2. Function-level: Caches individual function verification"
+            echo ""
+            echo "  With --use-global-cache, results are also stored in a shared"
+            echo "  location (~/.cache/trust) for reuse across projects."
+            echo ""
+            echo "JSON output format is designed for AI agents and tooling:"
+            echo "  {\"version\": \"1.0\", \"summary\": {...}, \"functions\": [...], ...}"
+            echo ""
+            echo "Verification attributes:"
+            echo "  #[requires(\"cond\")]    - Precondition that must hold on entry"
+            echo "  #[ensures(\"cond\")]     - Postcondition that must hold on exit"
+            echo "  #[invariant(\"cond\")]   - Loop invariant"
+            echo "  #[decreases(\"expr\")]   - Termination measure for recursion"
+            echo ""
+            echo "Verification error codes (use --explain for details):"
+            echo "  E0900  verification condition not provable"
+            echo "  E0901  termination not proven"
+            echo "  E0902  temporal property violated"
+            echo "  E0903  precondition not established"
+            echo "  E0904  invariant not preserved"
+            echo "  E0905  refinement type mismatch"
+            echo "  E0906  arithmetic overflow possible"
+            echo "  E0907  division by zero possible"
+            echo "  E0908  array index out of bounds"
+            echo "  E0909  unsafe block requires proof"
+            exit 0
+            ;;
+        *.rs)
+            # Track source file for caching
+            SOURCE_FILE="$1"
+            ARGS+=("$1")
+            shift
+            ;;
+        *)
+            ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# If verification is requested, ensure the compiler supports -Zverify.
+if [ "$VERIFY" -eq 1 ] && ! rustc_supports_zverify; then
+    echo "Error: this rustc does not support -Zverify (verification pass not available)." >&2
+    echo "  rustc: $RUSTC" >&2
+    echo "" >&2
+    echo "tRust verification requires a patched rustc build with the -Zverify flag." >&2
+    echo "If you only want to compile without verification, use: ./bin/trustc --no-verify <file.rs>" >&2
+    echo "See: docs/GETTING_STARTED.md" >&2
+    exit 1
+fi
+
+# Build rustc command
+CMD=("$RUSTC")
+if [ "$HAS_SYSROOT" -eq 0 ]; then
+    CMD+=(--sysroot "$SYSROOT")
+fi
+
+if [ "$VERIFY" -eq 1 ]; then
+    CMD+=(-Zverify)
+fi
+
+# Add user arguments
+CMD+=("${ARGS[@]}")
+
+# Set environment variables for verification config
+# Priority: --output-format flag > TRUST_OUTPUT_FORMAT env var > default "human"
+export TRUST_OUTPUT_FORMAT="${OUTPUT_FORMAT:-${TRUST_OUTPUT_FORMAT:-human}}"
+
+# Set profiling environment variable
+if [ "$PROFILE" -eq 1 ]; then
+    export TRUST_VERIFY_PROFILE=1
+fi
+
+# Set state machine extraction environment variable (Phase 6.1)
+if [ "$EXTRACT_STATE_MACHINES" -eq 1 ]; then
+    export TRUST_EXTRACT_STATE_MACHINES=1
+    if [ -n "$EXTRACT_OUTPUT" ]; then
+        export TRUST_EXTRACT_OUTPUT="$EXTRACT_OUTPUT"
+    fi
+fi
+
+# Check for verbose mode from environment (set by cargo-trust from Cargo.toml)
+if [ -n "${TRUST_VERIFY_VERBOSE:-}" ] && [ "$TRUST_VERIFY_VERBOSE" = "1" ]; then
+    VERBOSE=1
+fi
+
+# TRUST_VERIFY_TIMEOUT is passed through to the compiler via environment
+# (The compiler reads this directly if/when timeout support is added)
+
+# Check verification cache if applicable
+CACHE_HIT=0
+FUNCTION_CACHE_JSON="{}"
+if [ "$USE_CACHE" -eq 1 ] && [ "$VERIFY" -eq 1 ] && [ -n "$SOURCE_FILE" ] && [ -f "$SOURCE_FILE" ]; then
+    if check_cache "$SOURCE_FILE"; then
+        CACHE_HIT=1
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "[trustc] File cache hit ($CACHE_HIT_SOURCE): $SOURCE_FILE (previously verified)" >&2
+        fi
+        # Still need to compile, but skip verification
+        CMD_NO_VERIFY=("$RUSTC")
+        if [ "$HAS_SYSROOT" -eq 0 ]; then
+            CMD_NO_VERIFY+=(--sysroot "$SYSROOT")
+        fi
+        # Don't add -Zverify since we're using cached result
+        CMD_NO_VERIFY+=("${ARGS[@]}")
+
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "[trustc] Compiling (cached verification): ${CMD_NO_VERIFY[*]}" >&2
+        fi
+        exec "${CMD_NO_VERIFY[@]}"
+    else
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "[trustc] File cache miss: $SOURCE_FILE (will verify)" >&2
+        fi
+        # File cache miss - load function-level cache for incremental verification
+        if [ "$USE_FUNCTION_CACHE" -eq 1 ]; then
+            FUNCTION_CACHE_JSON=$(load_function_cache "$SOURCE_FILE")
+            if [ "$FUNCTION_CACHE_JSON" != "{}" ] && [ "$VERBOSE" -eq 1 ]; then
+                echo "[trustc] Function cache loaded: $(echo "$FUNCTION_CACHE_JSON" | wc -c) bytes" >&2
+            fi
+        fi
+    fi
+fi
+
+# Pass function cache to compiler via environment variable
+if [ "$FUNCTION_CACHE_JSON" != "{}" ]; then
+    export TRUST_FUNCTION_CACHE="$FUNCTION_CACHE_JSON"
+fi
+
+# Run with optional verbose output
+if [ "$VERBOSE" -eq 1 ]; then
+    # Output verbose info to stderr so it doesn't interfere with cargo
+    echo "[trustc] Running: ${CMD[*]}" >&2
+    echo "[trustc] Output format: $TRUST_OUTPUT_FORMAT" >&2
+    if [ "$USE_CACHE" -eq 1 ]; then
+        echo "[trustc] Caching: enabled (project)" >&2
+        if [ "$USE_GLOBAL_CACHE" = "1" ]; then
+            echo "[trustc] Global caching: enabled" >&2
+        fi
+    fi
+    if [ "$PROFILE" -eq 1 ]; then
+        echo "[trustc] Profiling: enabled" >&2
+    fi
+    if [ -n "${TRUST_VERIFY_TIMEOUT:-}" ]; then
+        echo "[trustc] Timeout: ${TRUST_VERIFY_TIMEOUT}s" >&2
+    fi
+fi
+
+# Run compilation with verification
+# Capture output for function cache if in JSON mode
+JSON_OUTPUT=""
+if [ "$USE_FUNCTION_CACHE" -eq 1 ] && [ "$TRUST_OUTPUT_FORMAT" = "json" ] && [ -n "$SOURCE_FILE" ]; then
+    # Capture JSON output for function cache update
+    if [ "$VERBOSE" -eq 1 ]; then
+        RUST_LOG=rustc_verify=debug JSON_OUTPUT=$("${CMD[@]}" 2>&1)
+        result=$?
+    else
+        JSON_OUTPUT=$("${CMD[@]}" 2>&1)
+        result=$?
+    fi
+    # Display the output to the user
+    echo "$JSON_OUTPUT"
+else
+    # Normal execution without capture
+    if [ "$VERBOSE" -eq 1 ]; then
+        RUST_LOG=rustc_verify=debug "${CMD[@]}"
+        result=$?
+    else
+        "${CMD[@]}"
+        result=$?
+    fi
+fi
+
+# Store verification result in cache if applicable
+if [ "$USE_CACHE" -eq 1 ] && [ "$VERIFY" -eq 1 ] && [ -n "$SOURCE_FILE" ] && [ -f "$SOURCE_FILE" ]; then
+    if [ $result -eq 0 ]; then
+        store_cache "$SOURCE_FILE" "verified"
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "[trustc] Cached: $SOURCE_FILE as verified" >&2
+        fi
+    else
+        store_cache "$SOURCE_FILE" "failed"
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "[trustc] Cached: $SOURCE_FILE as failed" >&2
+        fi
+    fi
+
+    # Update function-level cache from JSON output if available
+    if [ "$USE_FUNCTION_CACHE" -eq 1 ] && [ -n "$JSON_OUTPUT" ]; then
+        update_function_cache_from_json "$SOURCE_FILE" "$JSON_OUTPUT"
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "[trustc] Function cache updated for $SOURCE_FILE" >&2
+        fi
+    fi
+fi
+
+exit $result

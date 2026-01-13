@@ -1,0 +1,11 @@
+[package]
+name = "mly-dsl"
+version.workspace = true
+edition.workspace = true
+description = "Kernel DSL and IR for Tensor Forge"
+
+[dependencies]
+mly-core = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]

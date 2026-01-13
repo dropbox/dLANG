@@ -1,0 +1,72 @@
+# tRust Integration Points Configuration
+# These files in rustc are modified or monitored by tRust
+
+[[integration_point]]
+path = "compiler/rustc_interface/src/passes.rs"
+risk = "high"
+description = "Verification hook insertion point"
+pattern = "fn analysis"
+modification = """
+// Add after providers setup:
+rustc_verify::provide(providers);
+
+// Add in compilation:
+if tcx.sess.opts.unstable_opts.verify {
+    let config = rustc_verify::VerifyConfig::default();
+    rustc_verify::verify_crate(tcx, &config);
+}
+"""
+
+[[integration_point]]
+path = "compiler/rustc_feature/src/builtin_attrs.rs"
+risk = "high"
+description = "Verification attribute definitions"
+pattern = "gated!"
+modification = """
+// Add to attribute list:
+gated!(requires, Normal, template!(NameValueStr: "condition"), ErrorPreceding, verify, "verification requires attribute"),
+gated!(ensures, Normal, template!(NameValueStr: "condition"), ErrorPreceding, verify, "verification ensures attribute"),
+gated!(invariant, Normal, template!(NameValueStr: "condition"), ErrorPreceding, verify, "verification invariant attribute"),
+gated!(decreases, Normal, template!(NameValueStr: "expression"), ErrorPreceding, verify, "verification decreases attribute"),
+gated!(pure, Normal, template!(Word), ErrorPreceding, verify, "pure function marker"),
+gated!(ghost, Normal, template!(NameValueStr: "vars"), ErrorPreceding, verify, "ghost variable declaration"),
+"""
+
+[[integration_point]]
+path = "compiler/rustc_session/src/options.rs"
+risk = "medium"
+description = "-Zverify flag definition"
+pattern = "unstable_opts"
+modification = """
+// Add to Z options struct:
+verify: bool = (false, parse_bool, [TRACKED],
+    "enable formal verification of code with specifications"),
+"""
+
+[[dependency]]
+crate = "rustc_middle"
+used_by = "rustc_verify"
+apis = ["TyCtxt", "Body", "DefId", "Ty", "Local", "Place"]
+risk = "medium"
+notes = "Core type context and MIR types"
+
+[[dependency]]
+crate = "rustc_hir"
+used_by = "rustc_verify"
+apis = ["Attribute", "Item", "Node"]
+risk = "low"
+notes = "HIR types for attribute extraction"
+
+[[dependency]]
+crate = "rustc_span"
+used_by = "rustc_verify"
+apis = ["Span", "Symbol"]
+risk = "low"
+notes = "Source location tracking"
+
+[[dependency]]
+crate = "rustc_data_structures"
+used_by = "rustc_verify"
+apis = ["fx::FxHashMap", "sync::Lrc"]
+risk = "low"
+notes = "Hash maps and reference counting"

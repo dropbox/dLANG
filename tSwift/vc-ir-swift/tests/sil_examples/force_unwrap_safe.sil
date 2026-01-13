@@ -1,0 +1,20 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// safeUnwrap: force unwraps an Optional with a non-nil precondition.
+// This should PASS verification because the Optional is required to be non-nil.
+// loc "unwrap.swift":3:12 marks the force unwrap location.
+
+@_requires("opt != nil")
+func safeUnwrap(_ opt: Optional<Int>) -> Int
+
+sil hidden @$s17force_unwrap_safe10safeUnwrapySiSiSgF : $@convention(thin) (Optional<Int>) -> Int {
+bb0(%0 : $Optional<Int>):
+  debug_value %0, let, name "opt", argno 1
+  %2 = unchecked_enum_data %0 : $Optional<Int>, #Optional.some!enumelt, loc "unwrap.swift":3:12
+  return %2
+} // end sil function '$s17force_unwrap_safe10safeUnwrapySiSiSgF'
+

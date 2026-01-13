@@ -1,0 +1,23 @@
+// SIL test file: Left shift with unconstrained shift amount (UNSAFE)
+// No precondition constrains the shift amount - could be negative or >= 64.
+// Auto-VC for shift overflow should FAIL because shift amount is unbounded.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Unsafe shift: no constraint on shift amount
+// When s < 0 or s >= 64, the behavior is undefined
+func unsafeShiftLeft(_ x: Int, _ s: Int) -> Int
+
+sil hidden @unsafeShiftLeft : $@convention(thin) (Int, Int) -> Int {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "x", argno 1
+  debug_value %1, let, name "s", argno 2
+  %4 = struct_extract %0, #Int._value
+  %5 = struct_extract %1, #Int._value
+  %6 = builtin "shl_Int64"(%4, %5) : $Builtin.Int64
+  %7 = struct $Int (%6)
+  return %7
+}

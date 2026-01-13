@@ -1,0 +1,32 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// castOrNegative: casts Animal to Dog, returns legs (4) if successful, -1 otherwise
+// Postcondition result >= 0 should FAIL because failure case returns -1
+@_ensures("result >= 0")
+func castOrNegative(_ animal: Animal) -> Int
+
+class Animal {}
+class Dog : Animal {}
+
+// Implementation using checked_cast_br
+sil hidden @$s17checked_cast_test14castOrNegativeySiAA6AnimalCF : $@convention(thin) (@guaranteed Animal) -> Int {
+bb0(%0 : $Animal):
+  debug_value %0, let, name "animal", argno 1
+  checked_cast_br [exact] Animal in %0 : $Animal to Dog, bb1, bb2
+
+bb1(%1 : $Dog):
+  // Cast succeeded: return 4
+  %2 = integer_literal $Builtin.Int64, 4
+  %3 = struct $Int (%2)
+  return %3
+
+bb2:
+  // Cast failed: return -1 (violates postcondition!)
+  %4 = integer_literal $Builtin.Int64, -1
+  %5 = struct $Int (%4)
+  return %5
+} // end sil function '$s17checked_cast_test14castOrNegativeySiAA6AnimalCF'

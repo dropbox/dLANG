@@ -1,0 +1,230 @@
+diff --git a/include/swift/AST/Attr.h b/include/swift/AST/Attr.h
+index 5bf834c7b0a..705c40b8429 100644
+--- a/include/swift/AST/Attr.h
++++ b/include/swift/AST/Attr.h
+@@ -804,6 +804,101 @@ public:
+   }
+ };
+ 
++// ============================================================================
++// tSwift Verification Attributes
++// ============================================================================
++
++/// Attribute for specifying function preconditions: @_requires("x > 0")
++class RequiresAttr : public DeclAttribute {
++public:
++  RequiresAttr(StringRef Condition, SourceLoc AtLoc, SourceRange Range,
++               bool Implicit)
++      : DeclAttribute(DeclAttrKind::Requires, AtLoc, Range, Implicit),
++        Condition(Condition) {}
++
++  RequiresAttr(StringRef Condition, bool Implicit)
++      : RequiresAttr(Condition, SourceLoc(), SourceRange(), Implicit) {}
++
++  /// The verification condition string.
++  const StringRef Condition;
++
++  StringRef getCondition() const { return Condition; }
++
++  static bool classof(const DeclAttribute *DA) {
++    return DA->getKind() == DeclAttrKind::Requires;
++  }
++
++  RequiresAttr *clone(ASTContext &ctx) const {
++    return new (ctx) RequiresAttr(Condition, AtLoc, Range, isImplicit());
++  }
++
++  bool isEquivalent(const RequiresAttr *other, Decl *attachedTo) const {
++    return Condition == other->Condition;
++  }
++};
++
++/// Attribute for specifying function postconditions: @_ensures("result > 0")
++class EnsuresAttr : public DeclAttribute {
++public:
++  EnsuresAttr(StringRef Condition, SourceLoc AtLoc, SourceRange Range,
++              bool Implicit)
++      : DeclAttribute(DeclAttrKind::Ensures, AtLoc, Range, Implicit),
++        Condition(Condition) {}
++
++  EnsuresAttr(StringRef Condition, bool Implicit)
++      : EnsuresAttr(Condition, SourceLoc(), SourceRange(), Implicit) {}
++
++  /// The verification condition string.
++  const StringRef Condition;
++
++  StringRef getCondition() const { return Condition; }
++
++  static bool classof(const DeclAttribute *DA) {
++    return DA->getKind() == DeclAttrKind::Ensures;
++  }
++
++  EnsuresAttr *clone(ASTContext &ctx) const {
++    return new (ctx) EnsuresAttr(Condition, AtLoc, Range, isImplicit());
++  }
++
++  bool isEquivalent(const EnsuresAttr *other, Decl *attachedTo) const {
++    return Condition == other->Condition;
++  }
++};
++
++/// Attribute for specifying type invariants: @_invariant("value >= 0")
++class InvariantAttr : public DeclAttribute {
++public:
++  InvariantAttr(StringRef Condition, SourceLoc AtLoc, SourceRange Range,
++                bool Implicit)
++      : DeclAttribute(DeclAttrKind::Invariant, AtLoc, Range, Implicit),
++        Condition(Condition) {}
++
++  InvariantAttr(StringRef Condition, bool Implicit)
++      : InvariantAttr(Condition, SourceLoc(), SourceRange(), Implicit) {}
++
++  /// The verification condition string.
++  const StringRef Condition;
++
++  StringRef getCondition() const { return Condition; }
++
++  static bool classof(const DeclAttribute *DA) {
++    return DA->getKind() == DeclAttrKind::Invariant;
++  }
++
++  InvariantAttr *clone(ASTContext &ctx) const {
++    return new (ctx) InvariantAttr(Condition, AtLoc, Range, isImplicit());
++  }
++
++  bool isEquivalent(const InvariantAttr *other, Decl *attachedTo) const {
++    return Condition == other->Condition;
++  }
++};
++
++// Note: @_trusted uses SIMPLE_DECL_ATTR which auto-generates TrustedAttr typedef
++
++// ============================================================================
++
+ /// Defines the @_alignment attribute.
+ class AlignmentAttr : public DeclAttribute {
+ public:
+diff --git a/include/swift/AST/DeclAttr.def b/include/swift/AST/DeclAttr.def
+index 408374a4509..20267ebea76 100644
+--- a/include/swift/AST/DeclAttr.def
++++ b/include/swift/AST/DeclAttr.def
+@@ -916,7 +916,32 @@ DECL_ATTR(warn, Warn,
+   AllowMultipleAttributes | ABIStableToAdd | ABIStableToRemove | APIStableToAdd | APIStableToRemove | ForbiddenInABIAttr,
+   174)
+ 
+-LAST_DECL_ATTR(Warn)
++// tSwift Verification Attributes (codes 175-178)
++// @_requires("condition") - function precondition
++DECL_ATTR(_requires, Requires,
++  OnFunc | OnConstructor | OnSubscript | OnAccessor,
++  AllowMultipleAttributes | LongAttribute | ABIStableToAdd | ABIStableToRemove | APIStableToAdd | APIStableToRemove | ForbiddenInABIAttr,
++  175)
++
++// @_ensures("condition") - function postcondition
++DECL_ATTR(_ensures, Ensures,
++  OnFunc | OnConstructor | OnSubscript | OnAccessor,
++  AllowMultipleAttributes | LongAttribute | ABIStableToAdd | ABIStableToRemove | APIStableToAdd | APIStableToRemove | ForbiddenInABIAttr,
++  176)
++
++// @_invariant("condition") - type invariant
++DECL_ATTR(_invariant, Invariant,
++  OnVar | OnClass | OnStruct | OnEnum,
++  AllowMultipleAttributes | LongAttribute | ABIStableToAdd | ABIStableToRemove | APIStableToAdd | APIStableToRemove | ForbiddenInABIAttr,
++  177)
++
++// @_trusted - skip verification for this declaration
++SIMPLE_DECL_ATTR(_trusted, Trusted,
++  OnFunc | OnConstructor | OnSubscript | OnAccessor | OnVar | OnClass | OnStruct | OnEnum,
++  ABIStableToAdd | ABIStableToRemove | APIStableToAdd | APIStableToRemove | ForbiddenInABIAttr,
++  178)
++
++LAST_DECL_ATTR(Trusted)
+ 
+ #undef DECL_ATTR_ALIAS
+ #undef CONTEXTUAL_DECL_ATTR_ALIAS
+diff --git a/include/swift/SILOptimizer/PassManager/Passes.def b/include/swift/SILOptimizer/PassManager/Passes.def
+index 75c46153e54..d76de9ceb1e 100644
+--- a/include/swift/SILOptimizer/PassManager/Passes.def
++++ b/include/swift/SILOptimizer/PassManager/Passes.def
+@@ -404,6 +404,8 @@ LEGACY_PASS(SILCombine, "sil-combine",
+      "Combine SIL Instructions via Peephole Optimization")
+ LEGACY_PASS(SILDebugInfoGenerator, "sil-debuginfo-gen",
+      "Generate Debug Information with Source Locations into Textual SIL")
++LEGACY_PASS(SILVerification, "sil-verification",
++     "Verification condition generation for formal verification")
+ LEGACY_PASS(EarlySROA, "early-sroa",
+      "Scalar Replacement of Aggregate Stack Objects on high-level SIL")
+ LEGACY_PASS(SROA, "sroa",
+diff --git a/lib/Parse/ParseDecl.cpp b/lib/Parse/ParseDecl.cpp
+index b54cab95ed9..f34a14c4dfd 100644
+--- a/lib/Parse/ParseDecl.cpp
++++ b/lib/Parse/ParseDecl.cpp
+@@ -3411,6 +3411,59 @@ ParserStatus Parser::parseNewDeclAttribute(DeclAttributes &Attributes,
+                                                  /*Implicit=*/false));
+     break;
+   }
++
++  // tSwift Verification Attributes
++  case DeclAttrKind::Requires:
++  case DeclAttrKind::Ensures:
++  case DeclAttrKind::Invariant: {
++    if (!consumeIfAttributeLParen()) {
++      diagnose(Loc, diag::attr_expected_lparen, AttrName,
++               DeclAttribute::isDeclModifier(DK));
++      return makeParserSuccess();
++    }
++
++    if (Tok.isNot(tok::string_literal)) {
++      diagnose(Loc, diag::attr_expected_string_literal, AttrName);
++      return makeParserSuccess();
++    }
++
++    auto Condition = getStringLiteralIfNotInterpolated(
++        Loc, ("'" + AttrName + "'").str());
++
++    consumeToken(tok::string_literal);
++
++    if (Condition.has_value())
++      AttrRange = SourceRange(Loc, Tok.getRange().getStart());
++    else
++      DiscardAttribute = true;
++
++    if (!consumeIf(tok::r_paren)) {
++      diagnose(Loc, diag::attr_expected_rparen, AttrName,
++               DeclAttribute::isDeclModifier(DK));
++      return makeParserSuccess();
++    }
++
++    if (!DiscardAttribute) {
++      switch (DK) {
++      case DeclAttrKind::Requires:
++        Attributes.add(new (Context) RequiresAttr(Condition.value(), AtLoc,
++                                                   AttrRange, /*Implicit=*/false));
++        break;
++      case DeclAttrKind::Ensures:
++        Attributes.add(new (Context) EnsuresAttr(Condition.value(), AtLoc,
++                                                  AttrRange, /*Implicit=*/false));
++        break;
++      case DeclAttrKind::Invariant:
++        Attributes.add(new (Context) InvariantAttr(Condition.value(), AtLoc,
++                                                    AttrRange, /*Implicit=*/false));
++        break;
++      default:
++        llvm_unreachable("Unhandled verification attribute");
++      }
++    }
++    break;
++  }
++
+   case DeclAttrKind::OriginallyDefinedIn: {
+     auto LeftLoc = Tok.getLoc();
+     if (!consumeIfAttributeLParen()) {
+diff --git a/lib/SILOptimizer/CMakeLists.txt b/lib/SILOptimizer/CMakeLists.txt
+index 1f34ce6e44d..0eb116b3712 100644
+--- a/lib/SILOptimizer/CMakeLists.txt
++++ b/lib/SILOptimizer/CMakeLists.txt
+@@ -17,3 +17,4 @@ add_subdirectory(SemanticARC)
+ add_subdirectory(Transforms)
+ add_subdirectory(UtilityPasses)
+ add_subdirectory(Utils)
++add_subdirectory(Verification)

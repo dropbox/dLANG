@@ -1,0 +1,41 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// addOne: increments x by 1, postcondition promises result > x
+// This postcondition will be ASSUMED by callers after the call returns.
+@_ensures("result > x")
+func addOne(_ x: Int) -> Int
+
+// useAddOne: calls addOne, postcondition promises result > n
+// This postcondition is ONLY provable because we assume addOne's postcondition:
+// From addOne: call_result > n  (substituted from "result > x" with x=n)
+// We return call_result, so result == call_result
+// Therefore: result > n (QED)
+@_ensures("result > n")
+func useAddOne(_ n: Int) -> Int
+
+// addOne implementation
+sil hidden @$s18ensures_assumption6addOneyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  %2 = struct_extract %0, #Int._value
+  %3 = integer_literal $Builtin.Int64, 1
+  %4 = integer_literal $Builtin.Int1, 0
+  %5 = builtin "sadd_with_overflow_Int64"(%2, %3, %4) : $(Builtin.Int64, Builtin.Int1)
+  %6 = tuple_extract %5, 0
+  %7 = struct $Int (%6)
+  return %7
+} // end sil function '$s18ensures_assumption6addOneyS2iF'
+
+// useAddOne implementation - calls addOne and returns its result
+sil hidden @$s18ensures_assumption9useAddOneyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "n", argno 1
+  // Get function reference to addOne
+  %2 = function_ref @$s18ensures_assumption6addOneyS2iF : $@convention(thin) (Int) -> Int
+  // Call addOne with our parameter
+  %3 = apply %2(%0) : $@convention(thin) (Int) -> Int
+  return %3
+} // end sil function '$s18ensures_assumption9useAddOneyS2iF'

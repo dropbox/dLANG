@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vc-ir-swift/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Configure SSH for private dependencies
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.Z4_DEPLOY_KEY }}
+
+      - name: Build vc-ir-swift
+        working-directory: vc-ir-swift
+        run: cargo build --release
+
+      - name: Run tests
+        working-directory: vc-ir-swift
+        run: cargo test --release
+
+      - name: Run clippy
+        working-directory: vc-ir-swift
+        run: cargo clippy --all-targets -- -D warnings
+
+  ffi-verify:
+    name: FFI Verification
+    runs-on: macos-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vc-ir-swift/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Configure SSH for private dependencies
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.Z4_DEPLOY_KEY }}
+
+      - name: Build FFI verify CLI
+        working-directory: vc-ir-swift
+        run: cargo build --release --bin tswift-ffi-verify
+
+      - name: Verify compatible FFI bindings (structural)
+        working-directory: vc-ir-swift
+        run: |
+          ./target/release/tswift-ffi-verify \
+            --swift tests/ffi_examples/math_import.swift \
+            --rust tests/ffi_examples/math_export.rs \
+            --verbose
+
+      - name: Verify compatible FFI bindings (Z4 semantic)
+        working-directory: vc-ir-swift
+        run: |
+          ./target/release/tswift-ffi-verify \
+            --swift tests/ffi_examples/math_import.swift \
+            --rust tests/ffi_examples/math_export.rs \
+            --z4 --verbose
+
+      - name: Verify incompatible bindings are detected
+        working-directory: vc-ir-swift
+        run: |
+          # This should exit with code 1 (incompatible)
+          if ./target/release/tswift-ffi-verify \
+              --swift tests/ffi_examples/incompatible_import.swift \
+              --rust tests/ffi_examples/math_export.rs \
+              --z4 --verbose; then
+            echo "ERROR: Expected incompatible bindings to fail verification"
+            exit 1
+          else
+            echo "OK: Incompatible bindings correctly detected"
+          fi
+
+      - name: FFI verification JSON output
+        working-directory: vc-ir-swift
+        run: |
+          ./target/release/tswift-ffi-verify \
+            --swift tests/ffi_examples/math_import.swift \
+            --rust tests/ffi_examples/math_export.rs \
+            --z4 --json
+
+  swift-macros:
+    name: Swift Macros
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test Swift macros
+        working-directory: tswift-macros
+        run: swift test
+
+  format:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        working-directory: vc-ir-swift
+        run: cargo fmt -- --check

@@ -1,0 +1,581 @@
+#!/bin/bash
+#
+# tswiftv - Swift verifier
+#
+# Drop-in replacement for swiftc. Verifies code before compiling.
+#
+# Usage:
+#   tswiftv file.swift                  Compile with verification (default)
+#   tswiftv -o output file.swift        Compile to output with verification
+#   tswiftv --no-verify file.swift      Compile without verification (passthrough to swiftc)
+#   tswiftv verify file.swift           Verify only (no compilation output)
+#   tswiftv --verify-only file.swift    Same as 'verify'
+#   tswiftv help                        Show this help
+#
+# Environment variables:
+#   SWIFT_FRONTEND    Path to swift-frontend binary (auto-detected if unset)
+#   MACOSX_SDK        Path to macOS SDK (auto-detected if unset)
+#
+# Exit codes:
+#   0  All verification conditions passed (and compilation succeeded if applicable)
+#   1  At least one verification condition failed
+#   2  Compilation or input error
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Locate tswift-verify binary
+TSWIFT_VERIFY="$PROJECT_ROOT/vc-ir-swift/target/release/tswift-verify"
+if [ ! -x "$TSWIFT_VERIFY" ]; then
+    TSWIFT_VERIFY="$PROJECT_ROOT/vc-ir-swift/target/debug/tswift-verify"
+fi
+
+if [ ! -x "$TSWIFT_VERIFY" ]; then
+    echo "Error: tswift-verify binary not found." >&2
+    echo "Run 'cargo build --release --bin tswift-verify' in $PROJECT_ROOT/vc-ir-swift" >&2
+    exit 2
+fi
+
+# Locate swift-frontend
+find_swift_frontend() {
+    if [ -n "${SWIFT_FRONTEND:-}" ] && [ -x "${SWIFT_FRONTEND:-}" ]; then
+        echo "$SWIFT_FRONTEND"
+        return 0
+    fi
+
+    # Check custom build location
+    local custom_build="$HOME/swift-project/build/Ninja-RelWithDebInfoAssert/swift-macosx-$(uname -m)/bin/swift-frontend"
+    if [ -x "$custom_build" ]; then
+        echo "$custom_build"
+        return 0
+    fi
+
+    # Check system swiftc (which includes frontend functionality)
+    if command -v swiftc &>/dev/null; then
+        echo "swiftc"
+        return 0
+    fi
+
+    return 1
+}
+
+# Locate macOS SDK
+find_sdk() {
+    if [ -n "${MACOSX_SDK:-}" ] && [ -d "${MACOSX_SDK:-}" ]; then
+        echo "$MACOSX_SDK"
+        return 0
+    fi
+
+    # Try xcrun
+    local sdk
+    sdk=$(xcrun --sdk macosx --show-sdk-path 2>/dev/null) && [ -d "$sdk" ] && echo "$sdk" && return 0
+
+    # Fallback paths
+    for path in \
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk" \
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"; do
+        if [ -d "$path" ]; then
+            echo "$path"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Locate Swift resource dir (needed for non-installed swift-frontend builds)
+find_resource_dir() {
+    local swift_frontend="$1"
+
+    if [ -n "${SWIFT_RESOURCE_DIR:-}" ] && [ -d "${SWIFT_RESOURCE_DIR:-}" ]; then
+        echo "$SWIFT_RESOURCE_DIR"
+        return 0
+    fi
+
+    # If swift_frontend is a path like .../bin/swift-frontend, look for ../lib/swift
+    if [[ "$swift_frontend" == /*swift-frontend ]]; then
+        local bin_dir
+        bin_dir="$(cd "$(dirname "$swift_frontend")" && pwd)"
+        local candidate="${bin_dir}/../lib/swift"
+        if [ -d "$candidate" ]; then
+            echo "$(cd "$candidate" && pwd)"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# Locate tSwift macro plugin executable (optional)
+find_macro_plugin() {
+    # SwiftPM builds macro plugin executables with the `-tool` suffix.
+    # If present, we can load it during compilation so users can write
+    # `@requires`/`@ensures` instead of the internal `@_requires`/`@_ensures`.
+    for candidate in \
+        "$PROJECT_ROOT/tswift-macros/.build"/*/release/tSwiftMacrosPlugin-tool \
+        "$PROJECT_ROOT/tswift-macros/.build"/*/debug/tSwiftMacrosPlugin-tool; do
+        if [ -x "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Print help
+print_help() {
+    cat << 'EOF'
+tswift - Swift compiler with formal verification
+
+Drop-in replacement for swiftc. Verifies code before compiling.
+
+USAGE:
+    tswift <file.swift>                Compile with verification (default)
+    tswift -o output <file.swift>      Compile to executable with verification
+    tswift -emit-library ...           Compile to library with verification
+    tswift --no-verify <file.swift>    Skip verification (passthrough to swiftc)
+    tswift verify <file.swift>         Verify only (no compilation output)
+    tswift --verify-only <file.swift>  Same as 'verify'
+    tswift help                        Show this help
+
+    All swiftc flags are supported and passed through unchanged.
+
+OPTIONS:
+    --no-verify       Skip verification, just compile (passthrough to swiftc)
+    --verify-only     Verify only, don't compile (same as 'verify' subcommand)
+    --verbose, -v     Show per-VC progress (verify mode)
+    --json            Output results as JSON (verify mode)
+    --diagnostic      Output compiler-style diagnostics (verify mode)
+    --quiet           Only output errors and failures (verify mode)
+    --emit-unknown-vcs=FILE Write all UNKNOWN/TIMEOUT VCs as JSON to FILE (verify mode)
+
+KANI OPTIONS (verify mode):
+    --export-kani=DIR Export Kani harnesses to DIR for manual verification
+    --run-kani        Run cargo-kani after export (auto-creates temp dir if needed)
+    --kani-bitvector  Use exact integer types (i64, etc.) instead of unbounded i128
+                      Required for detecting actual overflow behavior
+
+    Kani is a Rust model checker that can find bugs through bounded verification.
+    Use --kani-bitvector to detect real overflow bugs that Z4's unbounded integers miss.
+
+EXAMPLES:
+    # Compile with verification (default)
+    tswift main.swift -o main
+    tswift -emit-executable main.swift -o main
+    tswift -emit-library lib.swift -o libfoo.dylib
+
+    # Skip verification (equivalent to swiftc)
+    tswift --no-verify main.swift -o main
+
+    # Verify only (no output)
+    tswift verify hello.swift
+    tswift --verify-only hello.swift
+    tswift verify --verbose hello.swift
+    tswift verify --sil output.sil
+
+    # Verify with Kani (detects actual overflow bugs)
+    tswift verify overflow.swift --run-kani --kani-bitvector
+
+    # Export Kani harnesses for manual verification
+    tswift verify file.swift --export-kani=./harnesses
+    cd harnesses && cargo kani  # Run manually
+
+ANNOTATIONS:
+    Add verification annotations to your Swift code:
+
+    @requires("x > 0")            Precondition (macro, if plugin is available)
+    @ensures("result >= 0")       Postcondition (macro, if plugin is available)
+
+    @_requires("x > 0")           Precondition: caller must ensure x > 0
+    @_ensures("result >= 0")      Postcondition: function guarantees result >= 0
+    @_trusted                     Skip verification for this function
+
+    Example:
+        @_requires("x > 0")
+        @_ensures("result >= x")
+        func double(_ x: Int) -> Int {
+            return x * 2
+        }
+
+VERIFICATION:
+    tswift automatically verifies:
+    - Your @_requires/@_ensures specifications are satisfied
+    - Arithmetic operations don't overflow
+    - Array accesses are in bounds
+    - No division by zero
+    - Optional force unwraps are safe
+    - Forced type casts are safe
+    - Integer truncations are in range
+    - Range bounds are valid (lowerBound <= upperBound)
+
+EXIT CODES:
+    0  All verification conditions passed
+    1  At least one verification condition failed
+    2  Compilation or input error
+
+ENVIRONMENT:
+    SWIFT_FRONTEND    Path to swift-frontend binary
+    MACOSX_SDK        Path to macOS SDK
+    SWIFT_RESOURCE_DIR  Path to Swift resource dir (for custom swift-frontend builds)
+EOF
+}
+
+# Compile Swift to SIL
+compile_to_sil() {
+    local swift_file="$1"
+    local sil_file="$2"
+    local swift_frontend
+    local sdk
+
+    swift_frontend=$(find_swift_frontend) || {
+        echo "Error: Could not find swift-frontend or swiftc" >&2
+        echo "Install Xcode Command Line Tools or set SWIFT_FRONTEND" >&2
+        return 2
+    }
+
+    local stderr_file
+    stderr_file="$(mktemp -t tswift.XXXXXX.stderr)"
+    trap "rm -f '$stderr_file'" RETURN
+
+    # Compile to SIL
+    # Use swift-frontend directly if available, otherwise use swiftc.
+    #
+    # If the macro plugin is present, attempt to load it so `@requires/@ensures`
+    # macros can be used. If macro loading fails, fall back to compiling without
+    # the plugin to preserve the non-macro workflow.
+    local macro_spec=""
+    if macro_plugin="$(find_macro_plugin 2>/dev/null)"; then
+        macro_spec="${macro_plugin}#tSwiftMacrosPlugin"
+    fi
+
+    if [[ "$swift_frontend" == *"swift-frontend"* ]]; then
+        sdk=$(find_sdk) || {
+            echo "Error: Could not find macOS SDK" >&2
+            echo "Install Xcode Command Line Tools or set MACOSX_SDK" >&2
+            return 2
+        }
+
+        local resource_dir=""
+        if resource_dir="$(find_resource_dir "$swift_frontend")"; then
+            # Note: We don't use -O here to preserve all user-defined functions for verification
+            # Aggressive optimization strips unused functions which prevents verification
+            if [ -n "$macro_spec" ]; then
+                if ! "$swift_frontend" -emit-sil -g "$swift_file" -sdk "$sdk" -resource-dir "$resource_dir" -load-plugin-executable "$macro_spec" >"$sil_file" 2>"$stderr_file"; then
+                    if grep -Eq 'load-plugin-executable|plugin|macro' "$stderr_file" 2>/dev/null; then
+                        : >"$stderr_file"
+                        if ! "$swift_frontend" -emit-sil -g "$swift_file" -sdk "$sdk" -resource-dir "$resource_dir" >"$sil_file" 2>"$stderr_file"; then
+                            echo "Swift compilation failed:" >&2
+                            cat "$stderr_file" >&2
+                            return 2
+                        fi
+                    else
+                        echo "Swift compilation failed:" >&2
+                        cat "$stderr_file" >&2
+                        return 2
+                    fi
+                fi
+            else
+                if ! "$swift_frontend" -emit-sil -g "$swift_file" -sdk "$sdk" -resource-dir "$resource_dir" >"$sil_file" 2>"$stderr_file"; then
+                    echo "Swift compilation failed:" >&2
+                    cat "$stderr_file" >&2
+                    return 2
+                fi
+            fi
+        else
+            if [ -n "$macro_spec" ]; then
+                if ! "$swift_frontend" -emit-sil -g "$swift_file" -sdk "$sdk" -load-plugin-executable "$macro_spec" >"$sil_file" 2>"$stderr_file"; then
+                    if grep -Eq 'load-plugin-executable|plugin|macro' "$stderr_file" 2>/dev/null; then
+                        : >"$stderr_file"
+                        if ! "$swift_frontend" -emit-sil -g "$swift_file" -sdk "$sdk" >"$sil_file" 2>"$stderr_file"; then
+                            echo "Swift compilation failed:" >&2
+                            cat "$stderr_file" >&2
+                            return 2
+                        fi
+                    else
+                        echo "Swift compilation failed:" >&2
+                        cat "$stderr_file" >&2
+                        return 2
+                    fi
+                fi
+            else
+                if ! "$swift_frontend" -emit-sil -g "$swift_file" -sdk "$sdk" >"$sil_file" 2>"$stderr_file"; then
+                    echo "Swift compilation failed:" >&2
+                    cat "$stderr_file" >&2
+                    return 2
+                fi
+            fi
+        fi
+    else
+        # swiftc doesn't need -sdk when using system installation
+        if [ -n "$macro_spec" ]; then
+            if ! "$swift_frontend" -Xfrontend -load-plugin-executable -Xfrontend "$macro_spec" -emit-sil -g "$swift_file" >"$sil_file" 2>"$stderr_file"; then
+                if grep -Eq 'load-plugin-executable|plugin|macro' "$stderr_file" 2>/dev/null; then
+                    : >"$stderr_file"
+                    if ! "$swift_frontend" -emit-sil -g "$swift_file" >"$sil_file" 2>"$stderr_file"; then
+                        echo "Swift compilation failed:" >&2
+                        cat "$stderr_file" >&2
+                        return 2
+                    fi
+                else
+                    echo "Swift compilation failed:" >&2
+                    cat "$stderr_file" >&2
+                    return 2
+                fi
+            fi
+        else
+            if ! "$swift_frontend" -emit-sil -g "$swift_file" >"$sil_file" 2>"$stderr_file"; then
+                echo "Swift compilation failed:" >&2
+                cat "$stderr_file" >&2
+                return 2
+            fi
+        fi
+    fi
+
+    # Forward any warnings to stderr, but keep the SIL stream clean.
+    if [ -s "$stderr_file" ]; then
+        cat "$stderr_file" >&2
+    fi
+}
+
+# Compile with verification (default mode)
+# Verifies all Swift files, then runs swiftc with original args if verification passes
+cmd_compile_with_verify() {
+    local swift_files=()
+    local all_args=("$@")
+
+    # Extract .swift files from arguments
+    for arg in "$@"; do
+        if [[ "$arg" == *.swift && -f "$arg" ]]; then
+            swift_files+=("$arg")
+        fi
+    done
+
+    # If no Swift files found, just passthrough to swiftc
+    # (might be a query mode like -version, -help, etc.)
+    if [ ${#swift_files[@]} -eq 0 ]; then
+        exec swiftc "$@"
+    fi
+
+    # Verify each Swift file
+    local tmp_dir
+    tmp_dir=$(mktemp -d -t tswift.XXXXXX)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    local verification_failed=false
+
+    for swift_file in "${swift_files[@]}"; do
+        local sil_file="$tmp_dir/$(basename "$swift_file" .swift).sil"
+
+        # Compile to SIL
+        if ! compile_to_sil "$swift_file" "$sil_file"; then
+            echo "tswift: error: Failed to compile $swift_file to SIL" >&2
+            exit 2
+        fi
+
+        # Verify the SIL (capture exit code)
+        if ! "$TSWIFT_VERIFY" --quiet --source-file "$swift_file" --sil "$sil_file"; then
+            verification_failed=true
+            echo "tswift: verification failed for $swift_file" >&2
+        fi
+    done
+
+    if $verification_failed; then
+        echo "tswift: verification failed, not compiling" >&2
+        exit 1
+    fi
+
+    # Verification passed - run swiftc with original arguments
+    exec swiftc "$@"
+}
+
+# Passthrough to swiftc without verification
+cmd_no_verify() {
+    exec swiftc "$@"
+}
+
+# Main verify command
+cmd_verify() {
+    local sil_mode=false
+    local input_file=""
+    local extra_args=()
+    local run_kani=false
+    local export_kani_dir=""
+    local auto_kani_dir=""
+
+    # Parse arguments
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --sil)
+                sil_mode=true
+                shift
+                ;;
+            --export-kani=*)
+                export_kani_dir="${1#--export-kani=}"
+                extra_args+=("$1")
+                shift
+                ;;
+            --export-kani)
+                if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+                    export_kani_dir="$2"
+                    extra_args+=("$1" "$2")
+                    shift 2
+                else
+                    echo "Error: --export-kani requires a directory path" >&2
+                    exit 2
+                fi
+                ;;
+            --run-kani)
+                run_kani=true
+                extra_args+=("$1")
+                shift
+                ;;
+            --kani-bitvector)
+                extra_args+=("$1")
+                shift
+                ;;
+            --help|-h)
+                print_help
+                exit 0
+                ;;
+            -*)
+                # Pass through any options we don't interpret here to tswift-verify.
+                # Handle `--color always` and `--progress auto` forms as 2-arg flags.
+                if [[ "$1" == "--color" || "$1" == "--progress" ]]; then
+                    if [[ "${2:-}" == "auto" || "${2:-}" == "always" || "${2:-}" == "never" ]]; then
+                        extra_args+=("$1" "$2")
+                        shift 2
+                        continue
+                    fi
+                fi
+                # Handle 2-arg path flags supported by tswift-verify.
+                if [[ "$1" == "--cache-dir" || "$1" == "--source-file" || "$1" == "--emit-unknown-vcs" ]]; then
+                    if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+                        extra_args+=("$1" "$2")
+                        shift 2
+                        continue
+                    fi
+                fi
+                extra_args+=("$1")
+                shift
+                ;;
+            *)
+                if [ -z "$input_file" ]; then
+                    input_file="$1"
+                else
+                    echo "Error: Multiple input files not supported" >&2
+                    exit 2
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$input_file" ]; then
+        echo "Error: No input file specified" >&2
+        echo "Usage: tswift verify <file.swift>" >&2
+        exit 2
+    fi
+
+    if [ ! -f "$input_file" ]; then
+        echo "Error: File not found: $input_file" >&2
+        exit 2
+    fi
+
+    # Convenience: if the user requests --run-kani without an explicit export dir,
+    # automatically export to a temporary directory so `tswift verify ... --run-kani`
+    # works end-to-end.
+    if $run_kani && [[ -z "$export_kani_dir" ]]; then
+        auto_kani_dir="$(mktemp -d -t tswift.kani.XXXXXX)"
+        export_kani_dir="$auto_kani_dir"
+        extra_args+=("--export-kani=$export_kani_dir")
+    fi
+
+    if $sil_mode; then
+        # Direct SIL verification
+        "$TSWIFT_VERIFY" ${extra_args[@]+"${extra_args[@]}"} --sil "$input_file"
+        local exit_code=$?
+        if [[ -n "$auto_kani_dir" ]]; then
+            rm -rf "$auto_kani_dir" || true
+        fi
+        exit "$exit_code"
+    else
+        # Compile Swift to SIL, then verify
+        local tmp_sil
+        tmp_sil=$(mktemp -t tswift.XXXXXX.sil)
+
+        if ! compile_to_sil "$input_file" "$tmp_sil"; then
+            rm -f "$tmp_sil" || true
+            if [[ -n "$auto_kani_dir" ]]; then
+                rm -rf "$auto_kani_dir" || true
+            fi
+            exit 2
+        fi
+
+        # Verify the SIL
+        "$TSWIFT_VERIFY" ${extra_args[@]+"${extra_args[@]}"} --source-file "$input_file" --sil "$tmp_sil"
+        local exit_code=$?
+        rm -f "$tmp_sil" || true
+        if [[ -n "$auto_kani_dir" ]]; then
+            rm -rf "$auto_kani_dir" || true
+        fi
+        exit "$exit_code"
+    fi
+}
+
+# Main entry point
+main() {
+    if [ $# -eq 0 ]; then
+        print_help
+        exit 0
+    fi
+
+    local first_arg="$1"
+
+    # Handle explicit subcommands and flags
+    case "$first_arg" in
+        verify)
+            shift
+            cmd_verify "$@"
+            ;;
+        --verify-only)
+            shift
+            cmd_verify "$@"
+            ;;
+        help|--help|-h)
+            print_help
+            exit 0
+            ;;
+        --version|-version)
+            # Pass version queries to swiftc
+            exec swiftc "$@"
+            ;;
+        --no-verify)
+            # Strip --no-verify and passthrough to swiftc
+            shift
+            cmd_no_verify "$@"
+            ;;
+        *)
+            # Check if --no-verify appears anywhere in the arguments
+            local args=()
+            local no_verify=false
+            for arg in "$@"; do
+                if [ "$arg" = "--no-verify" ]; then
+                    no_verify=true
+                else
+                    args+=("$arg")
+                fi
+            done
+
+            if $no_verify; then
+                cmd_no_verify "${args[@]}"
+            else
+                # Default: compile with verification
+                cmd_compile_with_verify "$@"
+            fi
+            ;;
+    esac
+}
+
+main "$@"

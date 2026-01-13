@@ -1,0 +1,46 @@
+// SIL test file: SwiftUI @Binding safe value update
+// Pattern: $binding.wrappedValue = newValue where newValue is validated
+// Auto-VC should PASS because value is bounded before assignment.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe binding update with validated value
+// @_requires("newValue >= 0 && newValue <= 100")
+@_requires("newValue >= 0 && newValue <= 100")
+func swiftui_binding_safe_update(_ binding: inout Int, _ newValue: Int) -> Void
+
+sil hidden @swiftui_binding_safe_update : $@convention(thin) (@inout Int, Int) -> () {
+bb0(%0 : $*Int, %1 : $Int):
+  debug_value_addr %0, var, name "binding", argno 1
+  debug_value %1, let, name "newValue", argno 2
+  // With precondition newValue in [0, 100], this is safe
+  store %1 to %0 : $*Int
+  %4 = tuple ()
+  return %4 : $()
+}
+
+// Binding read + transform + write (slider value * 10)
+// @_requires("value >= 0 && value <= 10")
+@_requires("value >= 0 && value <= 10")
+func swiftui_binding_transform(_ binding: inout Int, _ value: Int) -> Void
+
+sil hidden @swiftui_binding_transform : $@convention(thin) (@inout Int, Int) -> () {
+bb0(%0 : $*Int, %1 : $Int):
+  debug_value_addr %0, var, name "binding", argno 1
+  debug_value %1, let, name "value", argno 2
+  // value * 10: when value is in [0, 10], result is in [0, 100]
+  %4 = struct_extract %1, #Int._value
+  %5 = integer_literal $Builtin.Int64, 10
+  %6 = integer_literal $Builtin.Int1, -1
+  %7 = builtin "smul_with_overflow_Int64"(%4, %5, %6) : $(Builtin.Int64, Builtin.Int1)
+  %8 = tuple_extract %7, 0
+  %9 = tuple_extract %7, 1
+  cond_fail %9, "arithmetic overflow"
+  %11 = struct $Int (%8)
+  store %11 to %0 : $*Int
+  %13 = tuple ()
+  return %13 : $()
+}

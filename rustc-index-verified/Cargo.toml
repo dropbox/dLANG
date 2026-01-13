@@ -1,0 +1,34 @@
+[package]
+name = "rustc-index-verified"
+version = "0.1.0"
+edition = "2021"
+description = "Formally verified rustc_index: mathematical proofs of type-safe indexing"
+license = "Apache-2.0"
+repository = "https://github.com/dropbox/dLANG/rustc-index-verified"
+
+# Exclude from parent tRust workspace
+[workspace]
+
+[dependencies]
+# SmallVec for efficient interval storage (matches upstream rustc_index)
+smallvec = "1.11"
+
+[dev-dependencies]
+
+[features]
+default = []
+# Enable nightly features matching rustc_index
+nightly = []
+# Match upstream rustc_index feature for randomized struct layouts
+rustc_randomized_layouts = []
+# Optional: enable smallvec-based regression repro in tests/solver_limitations.rs
+smallvec_test = []
+
+[lib]
+name = "rustc_index_verified"
+path = "src/lib.rs"
+
+# Declare expected cfgs to suppress warnings
+# trust_verify is set by trustc when verification is enabled
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(trust_verify)"] }

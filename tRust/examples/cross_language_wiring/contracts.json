@@ -1,0 +1,159 @@
+{
+  "version": "1.0",
+  "crate_name": "backend",
+  "timestamp": "2026-01-03T12:00:00Z",
+  "contracts": [
+    {
+      "function": "create_user",
+      "module": "",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/users",
+        "method": "POST"
+      },
+      "requires": [
+        { "expr": "email.len() > 0", "label": "email must not be empty" },
+        { "expr": "age >= 18", "label": "must be adult" }
+      ],
+      "ensures": [
+        { "expr": "result > 0", "label": "returns valid user ID" }
+      ],
+      "params": [
+        { "name": "email", "type": "&str" },
+        { "name": "age", "type": "u32" }
+      ],
+      "return_type": "u64",
+      "pure": false,
+      "effects": ["IO"]
+    },
+    {
+      "function": "get_user",
+      "module": "",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/users/{id}",
+        "method": "GET"
+      },
+      "requires": [
+        { "expr": "user_id > 0", "label": "user ID must be positive" }
+      ],
+      "ensures": [],
+      "params": [
+        { "name": "user_id", "type": "u64" }
+      ],
+      "return_type": "Option<User>",
+      "pure": false,
+      "effects": ["IO"]
+    },
+    {
+      "function": "delete_user",
+      "module": "",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/users/{id}",
+        "method": "DELETE"
+      },
+      "requires": [
+        { "expr": "user_id > 0", "label": "user ID must be positive" },
+        { "expr": "is_admin", "label": "caller must be admin" }
+      ],
+      "ensures": [
+        { "expr": "result == true || result == false" }
+      ],
+      "params": [
+        { "name": "user_id", "type": "u64" },
+        { "name": "is_admin", "type": "bool" }
+      ],
+      "return_type": "bool",
+      "pure": false,
+      "effects": ["IO"]
+    },
+    {
+      "function": "add_to_cart",
+      "module": "",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/cart/add",
+        "method": "POST"
+      },
+      "requires": [
+        { "expr": "product_id > 0", "label": "product ID must be positive" },
+        { "expr": "quantity >= 1", "label": "quantity must be at least 1" }
+      ],
+      "ensures": [
+        { "expr": "result >= 0", "label": "returns non-negative total" }
+      ],
+      "params": [
+        { "name": "product_id", "type": "u64" },
+        { "name": "quantity", "type": "u32" }
+      ],
+      "return_type": "i32",
+      "pure": false,
+      "effects": ["IO"]
+    },
+    {
+      "function": "process_payment",
+      "module": "",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/payment",
+        "method": "POST"
+      },
+      "requires": [
+        { "expr": "amount > 0", "label": "amount must be positive" },
+        { "expr": "card_number >= 1000000000000000", "label": "card number must be 16 digits" },
+        { "expr": "card_number <= 9999999999999999", "label": "card number must be 16 digits" }
+      ],
+      "ensures": [
+        { "expr": "result == true || result == false" }
+      ],
+      "params": [
+        { "name": "amount", "type": "u64" },
+        { "name": "card_number", "type": "u64" }
+      ],
+      "return_type": "bool",
+      "pure": false,
+      "effects": ["IO"]
+    },
+    {
+      "function": "search_products",
+      "module": "",
+      "visibility": "public",
+      "api_metadata": {
+        "path": "/api/products/search",
+        "method": "GET"
+      },
+      "requires": [
+        { "expr": "query.len() > 0", "label": "query must not be empty" },
+        { "expr": "limit >= 1", "label": "limit must be at least 1" },
+        { "expr": "limit <= 100", "label": "limit must not exceed 100" }
+      ],
+      "ensures": [],
+      "params": [
+        { "name": "query", "type": "&str" },
+        { "name": "limit", "type": "u32" }
+      ],
+      "return_type": "Vec<Product>",
+      "pure": false,
+      "effects": ["IO"]
+    }
+  ],
+  "types": {
+    "User": {
+      "kind": "struct",
+      "fields": [
+        { "name": "id", "type": "u64" },
+        { "name": "email", "type": "String" },
+        { "name": "age", "type": "u32" }
+      ]
+    },
+    "Product": {
+      "kind": "struct",
+      "fields": [
+        { "name": "id", "type": "u64" },
+        { "name": "name", "type": "String" },
+        { "name": "price", "type": "u64" }
+      ]
+    }
+  }
+}

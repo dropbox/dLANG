@@ -1,0 +1,35 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// canFail: a function that may throw (stub for testing)
+sil hidden @$s8throwing7canFailyS2iKF : $@convention(thin) (Int) -> (Int, @error any Error) {
+bb0(%0 : $Int):
+  return %0 : $Int
+}
+
+// tryOrDefault: calls canFail, returns result on success or 0 on error
+// Non-throwing wrapper that handles errors
+// Result is the input on success, 0 on error
+// Since input could be anything, we just verify we handled both paths
+@_ensures("result >= 0 || result < 0")
+func tryOrDefault(_ x: Int) -> Int
+
+sil hidden @$s8throwing12tryOrDefaultyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  %1 = function_ref @$s8throwing7canFailyS2iKF : $@convention(thin) (Int) -> (Int, @error any Error)
+  try_apply %1(%0) : $@convention(thin) (Int) -> (Int, @error any Error), normal bb1, error bb2
+
+bb1(%2 : $Int):
+  // Success: return the value
+  return %2 : $Int
+
+bb2(%3 : $any Error):
+  // Error: return 0
+  %4 = integer_literal $Builtin.Int64, 0
+  %5 = struct $Int (%4)
+  return %5 : $Int
+} // end sil function '$s8throwing12tryOrDefaultyS2iF'

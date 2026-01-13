@@ -1,0 +1,26 @@
+[book]
+title = "Verification with tRust"
+authors = ["tRust Contributors"]
+description = "A comprehensive guide to formal verification with tRust - the Rust compiler with built-in verification"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "rust"
+git-repository-url = "https://github.com/dropbox/dLANG/tRust"
+edit-url-template = "https://github.com/dropbox/dLANG/tRust/edit/main/book/src/{path}"
+
+[output.html.fold]
+enable = true
+level = 1
+
+[rust]
+edition = "2021"
+
+# Code examples use tRust-specific attributes like #[requires] and #[ensures]
+# which are not valid standard Rust, so we disable doc tests
+[output.html.playground]
+runnable = false

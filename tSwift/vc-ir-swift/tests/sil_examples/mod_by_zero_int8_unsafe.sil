@@ -1,0 +1,19 @@
+// SIL test file: Int8 signed modulo by zero detection
+// Tests that mod-by-zero auto-VC is generated for srem_Int8
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Int8 signed modulo - may divide by zero
+sil hidden @mod_int8 : $@convention(thin) (Int8, Int8) -> Int8 {
+bb0(%0 : $Int8, %1 : $Int8):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %4 = struct_extract %0, #Int8._value
+  %5 = struct_extract %1, #Int8._value
+  %6 = builtin "srem_Int8"(%4, %5) : $Builtin.Int8
+  %7 = struct $Int8 (%6)
+  return %7
+}

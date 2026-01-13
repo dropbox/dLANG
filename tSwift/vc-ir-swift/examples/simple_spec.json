@@ -1,0 +1,19 @@
+{
+  "function_name": "increment",
+  "source_file": "test.swift",
+  "source_line": 10,
+  "source_column": 1,
+  "parameters": [
+    {"name": "x", "type": {"kind": "Int", "signed": true, "bits": 64}, "index": 0}
+  ],
+  "return_type": {"kind": "Int", "signed": true, "bits": 64},
+  "requires": [
+    {"kind": "Gt", "lhs": {"kind": "ParamRef", "name": "x", "index": 0}, "rhs": {"kind": "IntLit", "value": 0}}
+  ],
+  "ensures": [
+    {"kind": "Gt", "lhs": {"kind": "ResultRef"}, "rhs": {"kind": "ParamRef", "name": "x", "index": 0}}
+  ],
+  "invariants": [],
+  "auto_vcs": [],
+  "is_trusted": false
+}

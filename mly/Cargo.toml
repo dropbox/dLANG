@@ -1,0 +1,71 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mly-core",
+    "crates/mly-dsl",
+    "crates/mly-metal",
+    "crates/mly-ane",
+    "crates/mly-cpu",
+    "crates/mly-runtime",
+    "crates/mly-verify",
+    "crates/mly-mlx",
+    "crates/mly-swift",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Tensor Forge Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dropbox/dLANG/mly"
+
+[workspace.dependencies]
+# Core numerical
+ndarray = "0.16"
+num-traits = "0.2"
+half = "2.4"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+safetensors = "0.4"
+
+# GPU - Metal
+metal = "0.29"
+objc2 = "0.5"
+objc2-foundation = "0.2"
+objc2-metal = "0.2"
+
+# Parallelism
+rayon = "1.10"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Testing
+criterion = "0.5"
+proptest = "1.5"
+
+# Internal crates
+mly-core = { path = "crates/mly-core" }
+mly-dsl = { path = "crates/mly-dsl" }
+mly-metal = { path = "crates/mly-metal" }
+mly-ane = { path = "crates/mly-ane" }
+mly-cpu = { path = "crates/mly-cpu" }
+mly-runtime = { path = "crates/mly-runtime" }
+mly-verify = { path = "crates/mly-verify" }
+mly-mlx = { path = "crates/mly-mlx" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+
+[profile.bench]
+lto = true
+codegen-units = 1

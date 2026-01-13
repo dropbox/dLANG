@@ -1,0 +1,90 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Test SIL file exercising weak/unowned reference storage and ObjC metatype conversions
+
+class MyClass {
+  weak var weakRef: MyClass?
+  unowned var unownedRef: MyClass
+}
+
+// Test weak reference operations
+sil @test_weak_operations : $@convention(thin) (@guaranteed MyClass) -> () {
+bb0(%0 : $MyClass):
+  // Allocate storage for weak reference
+  %1 = alloc_stack $@sil_weak Optional<MyClass>
+
+  // Store weak reference (initializing)
+  store_weak %0 to [init] %1 : $*@sil_weak Optional<MyClass>
+
+  // Load weak reference
+  %2 = load_weak %1 : $*@sil_weak Optional<MyClass>
+
+  // Load weak with take semantics
+  %3 = load_weak [take] %1 : $*@sil_weak Optional<MyClass>
+
+  // Store weak reference (reassigning)
+  store_weak %0 to %1 : $*@sil_weak Optional<MyClass>
+
+  // Copy weak value
+  %4 = alloc_stack $@sil_weak Optional<MyClass>
+  %5 = weak_copy_value %0 : $@sil_weak Optional<MyClass>
+
+  // Convert weak to strong
+  %6 = strong_copy_weak_value %5 : $@sil_weak Optional<MyClass>
+
+  dealloc_stack %4 : $*@sil_weak Optional<MyClass>
+  dealloc_stack %1 : $*@sil_weak Optional<MyClass>
+
+  %99 = tuple ()
+  return %99 : $()
+}
+
+// Test unowned reference operations
+sil @test_unowned_operations : $@convention(thin) (@guaranteed MyClass) -> () {
+bb0(%0 : $MyClass):
+  // Allocate storage for unowned reference
+  %1 = alloc_stack $@sil_unowned MyClass
+
+  // Store unowned reference (initializing)
+  store_unowned %0 to [init] %1 : $*@sil_unowned MyClass
+
+  // Load unowned reference
+  %2 = load_unowned %1 : $*@sil_unowned MyClass
+
+  // Load unowned with take semantics
+  %3 = load_unowned [take] %1 : $*@sil_unowned MyClass
+
+  // Store unowned reference (reassigning)
+  store_unowned %0 to %1 : $*@sil_unowned MyClass
+
+  // Copy unowned value (wrap value in @sil_unowned)
+  %4 = unowned_copy_value %0 : $MyClass
+
+  dealloc_stack %1 : $*@sil_unowned MyClass
+
+  %99 = tuple ()
+  return %99 : $()
+}
+
+// Test ObjC metatype conversions
+sil @test_objc_metatype_conversions : $@convention(thin) () -> @owned AnyObject {
+bb0:
+  // Get ObjC metatype and convert to object
+  %0 = metatype $@objc_metatype MyClass.Type
+  %1 = objc_metatype_to_object %0 : $@objc_metatype MyClass.Type to $AnyObject
+
+  return %1 : $AnyObject
+}
+
+// Test existential ObjC metatype conversion
+sil @test_objc_existential_metatype : $@convention(thin) (@thick any AnyObject.Type) -> @owned AnyObject {
+bb0(%0 : $@thick any AnyObject.Type):
+  // Convert existential metatype to ObjC and then to object
+  %1 = thick_to_objc_metatype %0 : $@thick any AnyObject.Type to $@objc_metatype any AnyObject.Type
+  %2 = objc_existential_metatype_to_object %1 : $@objc_metatype any AnyObject.Type to $AnyObject
+
+  return %2 : $AnyObject
+}

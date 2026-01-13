@@ -1,0 +1,50 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// addOne: increments x by 1, postcondition promises result > x
+// This postcondition will be ASSUMED by callers after the call returns.
+@_ensures("result > x")
+func addOne(_ x: Int) -> Int
+
+// useModArg: calls addOne(a % 10), postcondition promises result > a % 10
+// This tests MODULO ARGUMENT EXPRESSION substitution in postcondition assumptions.
+//
+// Analysis:
+// - Callee postcondition: result > x
+// - Call: addOne(a % 10) where a % 10 is computed via SIL builtin srem
+// - Substituted assumption: call_result > (a % 10)
+// - Caller returns call_result, so result == call_result
+// - Postcondition to prove: result > a % 10
+// - With assumption call_result > a % 10 and result == call_result => result > a % 10 (QED)
+@_ensures("result > a % 10")
+func useModArg(_ a: Int) -> Int
+
+// addOne implementation
+sil hidden @$s16ensures_mod_args6addOneyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  %2 = struct_extract %0, #Int._value
+  %3 = integer_literal $Builtin.Int64, 1
+  %4 = integer_literal $Builtin.Int1, 0
+  %5 = builtin "sadd_with_overflow_Int64"(%2, %3, %4) : $(Builtin.Int64, Builtin.Int1)
+  %6 = tuple_extract %5, 0
+  %7 = struct $Int (%6)
+  return %7
+} // end sil function '$s16ensures_mod_args6addOneyS2iF'
+
+// useModArg implementation - computes a % 10, then calls addOne(a % 10)
+sil hidden @$s16ensures_mod_args9useModArgySiSiF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "a", argno 1
+  // Compute a % 10
+  %2 = struct_extract %0, #Int._value      // a._value
+  %3 = integer_literal $Builtin.Int64, 10
+  %4 = builtin "srem_Int64"(%2, %3) : $Builtin.Int64
+  %5 = struct $Int (%4)                     // wrap as Int
+  // Call addOne(a % 10)
+  %6 = function_ref @$s16ensures_mod_args6addOneyS2iF : $@convention(thin) (Int) -> Int
+  %7 = apply %6(%5) : $@convention(thin) (Int) -> Int
+  return %7
+} // end sil function '$s16ensures_mod_args9useModArgySiSiF'

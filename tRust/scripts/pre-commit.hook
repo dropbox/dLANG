@@ -1,0 +1,75 @@
+#!/bin/bash
+# tRust Pre-Commit Hook
+# Prevents commits with broken builds or failing tests
+#
+# Install: cp scripts/pre-commit.hook .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Or run: ./scripts/install-hooks.sh
+#
+# Environment variables:
+#   TRUST_SKIP_HOOKS=1    - Skip all pre-commit checks (emergency use only)
+#   TRUST_FULL_BUILD=1    - Run full stage 1 build (slow, comprehensive)
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+cd "$(git rev-parse --show-toplevel)"
+
+# Allow skipping for emergency commits
+if [ "$TRUST_SKIP_HOOKS" = "1" ]; then
+    echo -e "${YELLOW}WARNING: Pre-commit hooks skipped via TRUST_SKIP_HOOKS${NC}"
+    exit 0
+fi
+
+echo "=== tRust Pre-Commit Verification ==="
+
+# Step 0: Ensure submodule SHAs are pushed (avoid dangling submodule refs)
+echo -n "Checking submodule SHAs are pushed... "
+if ./scripts/check_submodules_pushed.sh --quiet >/dev/null; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    echo "One or more submodules have local-only commits. Push them (or set TRUST_SKIP_HOOKS=1 for emergencies)."
+    exit 1
+fi
+
+# Step 1: Quick build check - rustc_vc crate
+echo -n "Checking rustc_vc builds... "
+if cargo check -p rustc_vc --quiet 2>/dev/null; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAILED${NC}"
+    echo "rustc_vc crate doesn't compile. Fix before committing."
+    exit 1
+fi
+
+# Step 2: Run workspace unit tests
+# Note: Integration tests (run_tests.sh) require -Zverify flag which is not yet
+# in the stage1 compiler. Unit tests verify the VC infrastructure works correctly.
+echo "Running workspace unit tests... "
+TEST_OUTPUT=$(cargo test --workspace 2>&1)
+if echo "$TEST_OUTPUT" | grep -q "^test result: FAILED"; then
+    echo -e "${RED}FAILED${NC}"
+    echo "Unit tests failed. Fix before committing."
+    echo "$TEST_OUTPUT" | grep -E "^test .* FAILED|^failures:" | head -20
+    exit 1
+fi
+# Count total passed tests from all test result lines
+TOTAL_PASSED=$(echo "$TEST_OUTPUT" | grep -E "^test result: ok\." | sed 's/.*ok\. \([0-9]*\) passed.*/\1/' | awk '{sum+=$1} END {print sum}')
+echo -e "${GREEN}OK (${TOTAL_PASSED} tests)${NC}"
+
+# Step 3: Full stage 1 build (only if requested)
+if [ "$TRUST_FULL_BUILD" = "1" ]; then
+    echo "Running full stage 1 build (TRUST_FULL_BUILD=1)..."
+    if ! (cd upstream/rustc && ./x.py build --stage 1); then
+        echo -e "${RED}Stage 1 build failed!${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Stage 1 build OK${NC}"
+fi
+
+echo -e "${GREEN}=== All pre-commit checks passed ===${NC}"
+exit 0

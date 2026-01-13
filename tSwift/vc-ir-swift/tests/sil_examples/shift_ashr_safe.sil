@@ -1,0 +1,23 @@
+// SIL test file: Arithmetic right shift with constrained shift amount (safe)
+// The @_requires precondition constrains the shift amount to valid range [0, 64).
+// Auto-VC for shift overflow should PASS because shift amount is bounded.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe arithmetic shift right: shift amount constrained to valid range
+@_requires("s >= 0 && s < 64")
+func safeArithmeticShiftRight(_ x: Int, _ s: Int) -> Int
+
+sil hidden @safeArithmeticShiftRight : $@convention(thin) (Int, Int) -> Int {
+bb0(%0 : $Int, %1 : $Int):
+  debug_value %0, let, name "x", argno 1
+  debug_value %1, let, name "s", argno 2
+  %4 = struct_extract %0, #Int._value
+  %5 = struct_extract %1, #Int._value
+  %6 = builtin "ashr_Int64"(%4, %5) : $Builtin.Int64
+  %7 = struct $Int (%6)
+  return %7
+}

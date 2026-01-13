@@ -1,0 +1,19 @@
+// SIL test file: Int16 signed division overflow detection
+// Tests INT_MIN / -1 overflow: -32768 / -1 = 32768, which overflows Int16
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Int16 signed division - may overflow on INT_MIN / -1
+sil hidden @sdiv_int16 : $@convention(thin) (Int16, Int16) -> Int16 {
+bb0(%0 : $Int16, %1 : $Int16):
+  debug_value %0, let, name "a", argno 1
+  debug_value %1, let, name "b", argno 2
+  %4 = struct_extract %0, #Int16._value
+  %5 = struct_extract %1, #Int16._value
+  %6 = builtin "sdiv_Int16"(%4, %5) : $Builtin.Int16
+  %7 = struct $Int16 (%6)
+  return %7
+}

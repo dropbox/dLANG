@@ -1,0 +1,61 @@
+// Test integer truncation bounds checking with explicit preconditions.
+// Swift: Int8(x) requires x in [-128, 127]; UInt8(x) requires x <= 255.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+@_requires("x >= -128")
+@_requires("x <= 127")
+func truncateIntSafe(_ x: Int) -> Int8
+
+// truncateIntSafe: Truncate Int to Int8 with bounds preconditions.
+sil @truncateIntSafe : $@convention(thin) (Int) -> Int8 {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  %1 = struct_extract %0, #Int._value
+  %2 = integer_literal $Builtin.Int64, -128
+  %3 = builtin "cmp_slt_Int64"(%1, %2) : $Builtin.Int1
+  cond_fail %3, "Not enough bits to represent a signed value"
+  %5 = integer_literal $Builtin.Int64, 127
+  %6 = builtin "cmp_slt_Int64"(%5, %1) : $Builtin.Int1
+  cond_fail %6, "Not enough bits to represent the passed value"
+  %8 = builtin "truncOrBitCast_Int64_Int8"(%1) : $Builtin.Int8
+  %9 = struct $Int8 (%8)
+  return %9
+}
+
+@_requires("x >= 0")
+@_requires("x <= 255")
+func truncateUIntSafe(_ x: UInt) -> UInt8
+
+// truncateUIntSafe: Truncate UInt to UInt8 with bounds preconditions.
+sil @truncateUIntSafe : $@convention(thin) (UInt) -> UInt8 {
+bb0(%0 : $UInt):
+  debug_value %0, let, name "x", argno 1
+  %1 = struct_extract %0, #UInt._value
+  %2 = integer_literal $Builtin.Int64, 255
+  %3 = builtin "cmp_ult_Int64"(%2, %1) : $Builtin.Int1
+  cond_fail %3, "Not enough bits to represent the passed value"
+  %5 = builtin "truncOrBitCast_Int64_Int8"(%1) : $Builtin.Int8
+  %6 = struct $UInt8 (%5)
+  return %6
+}
+
+@_requires("x >= 0")
+@_requires("x <= 127")
+func truncateToSignedSafe(_ x: UInt) -> Int8
+
+// truncateToSignedSafe: Truncate UInt to Int8 with bounds preconditions.
+sil @truncateToSignedSafe : $@convention(thin) (UInt) -> Int8 {
+bb0(%0 : $UInt):
+  debug_value %0, let, name "x", argno 1
+  %1 = struct_extract %0, #UInt._value
+  %2 = integer_literal $Builtin.Int64, 127
+  %3 = builtin "cmp_ult_Int64"(%2, %1) : $Builtin.Int1
+  cond_fail %3, "Not enough bits to represent the passed value"
+  %5 = builtin "truncOrBitCast_Int64_Int8"(%1) : $Builtin.Int8
+  %6 = struct $Int8 (%5)
+  return %6
+}

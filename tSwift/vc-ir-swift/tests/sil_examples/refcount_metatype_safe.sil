@@ -1,0 +1,149 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// Test file for reference counting and metatype instructions
+
+class RefCountedClass {
+  @_hasStorage var value: Int { get set }
+  @objc deinit
+  init()
+}
+
+// Test function: Uses strong_retain/strong_release with class instances
+// @_requires: true
+// @_ensures: result >= 0
+@_requires("true")
+@_ensures("result >= 0")
+func testStrongRetainRelease() -> Int
+
+sil hidden @$s18refcount_metatype23testStrongRetainReleaseSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate a class instance
+  %0 = alloc_ref $RefCountedClass
+
+  // strong_retain: increment reference count
+  strong_retain %0 : $RefCountedClass
+
+  // Use the value (simulated)
+  %2 = integer_literal $Builtin.Int64, 42
+  %3 = struct $Int (%2)
+
+  // strong_release: decrement reference count
+  strong_release %0 : $RefCountedClass
+
+  // Deallocate the instance
+  dealloc_ref %0 : $RefCountedClass
+
+  return %3 : $Int
+}
+
+// Test function: Uses retain_value/release_value (generic reference counting)
+// @_requires: true
+// @_ensures: result >= 0
+@_requires("true")
+@_ensures("result >= 0")
+func testRetainReleaseValue() -> Int
+
+sil hidden @$s18refcount_metatype21testRetainReleaseValueSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Create a value
+  %0 = integer_literal $Builtin.Int64, 100
+  %1 = struct $Int (%0)
+
+  // Simulate retain_value on a struct (no-op for trivial types, but valid SIL)
+  retain_value %1 : $Int
+
+  // Use the value
+  %3 = struct_extract %1, #Int._value
+
+  // release_value
+  release_value %1 : $Int
+
+  // Return result
+  %5 = struct $Int (%3)
+  return %5 : $Int
+}
+
+// Test function: Uses metatype instruction (static metatype)
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testStaticMetatype() -> Int
+
+sil hidden @$s18refcount_metatype17testStaticMetatypeSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Get static metatype
+  %0 = metatype $@thick Int.Type
+
+  // Return a constant
+  %1 = integer_literal $Builtin.Int64, 1
+  %2 = struct $Int (%1)
+  return %2 : $Int
+}
+
+// Test function: Uses value_metatype instruction (dynamic metatype)
+// @_requires: true
+// @_ensures: true
+@_requires("true")
+@_ensures("true")
+func testValueMetatype() -> Int
+
+sil hidden @$s18refcount_metatype17testValueMetatypeSiyF : $@convention(thin) () -> Int {
+bb0:
+  // Allocate a class instance
+  %0 = alloc_ref $RefCountedClass
+
+  // Get dynamic metatype from instance
+  %1 = value_metatype $@thick RefCountedClass.Type, %0 : $RefCountedClass
+
+  // Deallocate instance
+  dealloc_ref %0 : $RefCountedClass
+
+  // Return a constant
+  %3 = integer_literal $Builtin.Int64, 2
+  %4 = struct $Int (%3)
+  return %4 : $Int
+}
+
+// Test function: Combined reference counting and metatype operations
+// @_requires: x >= 0
+// @_ensures: result >= x
+@_requires("x >= 0")
+@_ensures("result >= x")
+func testCombined(x: Int) -> Int
+
+sil hidden @$s18refcount_metatype11testCombinedySiSiF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  // Get metatype
+  %1 = metatype $@thick Int.Type
+
+  // Allocate class
+  %2 = alloc_ref $RefCountedClass
+
+  // Retain
+  strong_retain %2 : $RefCountedClass
+
+  // Get dynamic metatype
+  %4 = value_metatype $@thick RefCountedClass.Type, %2 : $RefCountedClass
+
+  // Release
+  strong_release %2 : $RefCountedClass
+
+  // Deallocate
+  dealloc_ref %2 : $RefCountedClass
+
+  // Return x (satisfies result >= x since result == x)
+  return %0 : $Int
+}
+
+// VTable
+sil_vtable RefCountedClass {
+  #RefCountedClass.value!getter: (RefCountedClass) -> () -> Int : @$s18refcount_metatype16RefCountedClassC5valueSivg
+  #RefCountedClass.value!setter: (RefCountedClass) -> (Int) -> () : @$s18refcount_metatype16RefCountedClassC5valueSivs
+  #RefCountedClass.init!allocator: (RefCountedClass.Type) -> () -> RefCountedClass : @$s18refcount_metatype16RefCountedClassCACycfC
+  #RefCountedClass.deinit!deallocator: @$s18refcount_metatype16RefCountedClassCfD
+}

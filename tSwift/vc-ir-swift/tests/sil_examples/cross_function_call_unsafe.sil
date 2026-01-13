@@ -1,0 +1,46 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// addOne: increments x by 1
+// Precondition: x >= 0
+// Postcondition: result == x + 1
+@_requires("x >= 0")
+@_ensures("result == x + 1")
+func addOne(_ x: Int) -> Int
+
+// callAddOne: calls addOne
+// Precondition: n >= 0 (to satisfy addOne's precondition)
+// Postcondition: result == n + 1 (from addOne's postcondition)
+@_requires("n >= 0")
+@_ensures("result == n + 1")
+func callAddOne(_ n: Int) -> Int
+
+// addOne implementation
+// Note: $s15 because "cross_func_test" is 15 characters
+sil hidden @$s15cross_func_test6addOneyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  %2 = struct_extract %0, #Int._value
+  %3 = integer_literal $Builtin.Int64, 1
+  %4 = integer_literal $Builtin.Int1, -1
+  %5 = builtin "sadd_with_overflow_Int64"(%2, %3, %4) : $(Builtin.Int64, Builtin.Int1)
+  %6 = tuple_extract %5, 0
+  %7 = tuple_extract %5, 1
+  cond_fail %7, "arithmetic overflow"
+  %9 = struct $Int (%6)
+  return %9
+} // end sil function '$s15cross_func_test6addOneyS2iF'
+
+// callAddOne implementation - calls addOne
+sil hidden @$s15cross_func_test10callAddOneyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "n", argno 1
+  // Get function reference to addOne
+  %2 = function_ref @$s15cross_func_test6addOneyS2iF : $@convention(thin) (Int) -> Int
+  // Call addOne with our parameter
+  %3 = apply %2(%0) : $@convention(thin) (Int) -> Int
+  return %3
+} // end sil function '$s15cross_func_test10callAddOneyS2iF'

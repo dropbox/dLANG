@@ -1,0 +1,50 @@
+// SIL test file: SwiftUI @ObservedObject / @Observable state access
+// Pattern: viewModel.items.count checked before array access
+// Auto-VC for bounds check should PASS with proper guard.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe observable state access with isEmpty check
+// Pattern: if !viewModel.items.isEmpty { viewModel.items[0] }
+// When count > 0, accessing index 0 is safe (0 >= 0 && 0 < count)
+sil hidden @swiftui_observable_first_item : $@convention(thin) (@guaranteed ViewModel) -> Int {
+bb0(%0 : $ViewModel):
+  debug_value %0, let, name "viewModel", argno 1
+  // Get items.count
+  %2 = class_method %0, #ViewModel.itemCount!getter : (ViewModel) -> () -> Int, $@convention(method) (@guaranteed ViewModel) -> Int
+  %3 = apply %2(%0) : $@convention(method) (@guaranteed ViewModel) -> Int
+  %4 = struct_extract %3, #Int._value
+  // Check: count > 0
+  %5 = integer_literal $Builtin.Int64, 0
+  %6 = builtin "cmp_sgt_Int64"(%4, %5) : $Builtin.Int1
+  cond_br %6, bb1, bb2
+
+bb1:
+  // Safe path: items not empty, can access index 0
+  // With count > 0, index 0 satisfies 0 >= 0 && 0 < count
+  %true = integer_literal $Builtin.Int1, -1
+  %idx = integer_literal $Builtin.Int64, 0
+  // Check negative: 0 < 0 = false
+  %neg = builtin "cmp_slt_Int64"(%idx, %5) : $Builtin.Int1
+  cond_fail %neg, "Index out of range"
+  // Check upper bound: 0 >= count = NOT(0 < count)
+  // count > 0 means 0 < count is true, so NOT(true) = false
+  %in = builtin "cmp_slt_Int64"(%idx, %4) : $Builtin.Int1
+  %oob = builtin "xor_Int1"(%in, %true) : $Builtin.Int1
+  cond_fail %oob, "Index out of range"
+  // Return first element (simplified)
+  %ret1 = struct $Int (%idx)
+  br bb3(%ret1 : $Int)
+
+bb2:
+  // Empty items, return default 0
+  %18 = integer_literal $Builtin.Int64, 0
+  %19 = struct $Int (%18)
+  br bb3(%19 : $Int)
+
+bb3(%20 : $Int):
+  return %20 : $Int
+}

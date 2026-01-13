@@ -1,0 +1,4 @@
+# This crate requires nightly Rust for the step_trait feature
+# which is needed for interval iteration (IntervalSet::iter, etc.)
+[toolchain]
+channel = "nightly"

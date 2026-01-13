@@ -1,0 +1,23 @@
+// SIL test file: Int32 left shift with constrained shift amount (safe)
+// The @_requires precondition constrains the shift amount to valid range [0, 32).
+// Auto-VC for shift overflow should PASS because shift amount is bounded.
+
+sil_stage canonical
+
+import Builtin
+import Swift
+
+// Safe Int32 shift: shift amount constrained to valid range [0, 32)
+@_requires("s >= 0 && s < 32")
+func safeInt32ShiftLeft(_ x: Int32, _ s: Int32) -> Int32
+
+sil hidden @safeInt32ShiftLeft : $@convention(thin) (Int32, Int32) -> Int32 {
+bb0(%0 : $Int32, %1 : $Int32):
+  debug_value %0, let, name "x", argno 1
+  debug_value %1, let, name "s", argno 2
+  %4 = struct_extract %0, #Int32._value
+  %5 = struct_extract %1, #Int32._value
+  %6 = builtin "shl_Int32"(%4, %5) : $Builtin.Int32
+  %7 = struct $Int32 (%6)
+  return %7
+}

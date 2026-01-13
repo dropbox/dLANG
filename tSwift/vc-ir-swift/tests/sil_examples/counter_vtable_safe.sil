@@ -1,0 +1,117 @@
+sil_stage canonical
+
+import Builtin
+import Swift
+import SwiftShims
+
+// clamp function - uses branch-with-args pattern (phi-like merge)
+// This pattern is now supported via phi-resolution in SIL→VCIR translation
+// Spec: result is always >= 0 (clamps negative values to 0)
+@_requires("true")
+@_ensures("result >= 0")
+func clamp(_ x: Int) -> Int
+
+protocol Counter {
+  func increment() -> Int
+  func decrement() -> Int
+}
+
+class SimpleCounter : Counter {
+  @_hasStorage @_hasInitialValue var value: Int { get set }
+  func increment() -> Int
+  func decrement() -> Int
+  @objc deinit
+  init()
+}
+
+struct ImmutableCounter : Counter {
+  @_hasStorage let value: Int { get }
+  func increment() -> Int
+  func decrement() -> Int
+  init(value: Int)
+}
+
+// Trusted function (skips verification)
+@_trusted
+func trustedOperation() -> Int
+
+// main
+sil @main : $@convention(c) (Int32, UnsafeMutablePointer<Optional<UnsafeMutablePointer<Int8>>>) -> Int32 {
+bb0(%0 : $Int32, %1 : $UnsafeMutablePointer<Optional<UnsafeMutablePointer<Int8>>>):
+  %2 = integer_literal $Builtin.Int32, 0
+  %3 = struct $Int32 (%2)
+  return %3
+} // end sil function 'main'
+
+// clamp(_:) - returns x if x >= 0, else 0
+sil hidden @$s12counter_test5clampyS2iF : $@convention(thin) (Int) -> Int {
+bb0(%0 : $Int):
+  debug_value %0, let, name "x", argno 1
+  %2 = integer_literal $Builtin.Int64, 0
+  %3 = struct_extract %0, #Int._value
+  %4 = builtin "cmp_slt_Int64"(%3, %2) : $Builtin.Int1
+  %5 = integer_literal $Builtin.Int1, -1
+  %6 = builtin "xor_Int1"(%4, %5) : $Builtin.Int1
+  cond_br %6, bb1, bb2
+
+bb1:
+  br bb3(%0)
+
+bb2:
+  %9 = integer_literal $Builtin.Int64, 0
+  %10 = struct $Int (%9)
+  br bb3(%10)
+
+bb3(%12 : $Int):
+  return %12
+} // end sil function '$s12counter_test5clampyS2iF'
+
+// SimpleCounter.increment() - adds 1 to value
+sil hidden @$s12counter_test13SimpleCounterC9incrementSiyF : $@convention(method) (@guaranteed SimpleCounter) -> Int {
+bb0(%0 : $SimpleCounter):
+  debug_value %0, let, name "self", argno 1
+  %2 = ref_element_addr %0, #SimpleCounter.value
+  %3 = begin_access [modify] [dynamic] %2
+  %4 = load %3
+  %5 = struct_extract %4, #Int._value
+  %6 = integer_literal $Builtin.Int64, 1
+  %7 = integer_literal $Builtin.Int1, -1
+  %8 = builtin "sadd_with_overflow_Int64"(%5, %6, %7) : $(Builtin.Int64, Builtin.Int1)
+  %9 = tuple_extract %8, 0
+  %10 = tuple_extract %8, 1
+  cond_fail %10, "arithmetic overflow"
+  %12 = struct $Int (%9)
+  store %12 to %3
+  end_access %3
+  return %12
+} // end sil function '$s12counter_test13SimpleCounterC9incrementSiyF'
+
+// trustedOperation() - returns 42
+sil hidden @$s12counter_test16trustedOperationSiyF : $@convention(thin) () -> Int {
+bb0:
+  %0 = integer_literal $Builtin.Int64, 42
+  %1 = struct $Int (%0)
+  return %1
+} // end sil function '$s12counter_test16trustedOperationSiyF'
+
+// VTable for SimpleCounter (should be skipped by parser)
+sil_vtable SimpleCounter {
+  #SimpleCounter.value!getter: (SimpleCounter) -> () -> Int : @$s12counter_test13SimpleCounterC5valueSivg
+  #SimpleCounter.value!setter: (SimpleCounter) -> (Int) -> () : @$s12counter_test13SimpleCounterC5valueSivs
+  #SimpleCounter.value!modify: (SimpleCounter) -> () -> () : @$s12counter_test13SimpleCounterC5valueSivM
+  #SimpleCounter.increment: (SimpleCounter) -> () -> Int : @$s12counter_test13SimpleCounterC9incrementSiyF
+  #SimpleCounter.decrement: (SimpleCounter) -> () -> Int : @$s12counter_test13SimpleCounterC9decrementSiyF
+  #SimpleCounter.init!allocator: (SimpleCounter.Type) -> () -> SimpleCounter : @$s12counter_test13SimpleCounterCACycfC
+  #SimpleCounter.deinit!deallocator: @$s12counter_test13SimpleCounterCfD
+}
+
+// Witness tables (should be skipped by parser)
+sil_witness_table hidden SimpleCounter: Counter module counter_test {
+  method #Counter.increment: <Self where Self : Counter> (Self) -> () -> Int : @$s12counter_test13SimpleCounterCAA0D0A2aDP9incrementSiyFTW
+  method #Counter.decrement: <Self where Self : Counter> (Self) -> () -> Int : @$s12counter_test13SimpleCounterCAA0D0A2aDP9decrementSiyFTW
+}
+
+sil_witness_table hidden ImmutableCounter: Counter module counter_test {
+  method #Counter.increment: <Self where Self : Counter> (Self) -> () -> Int : @$s12counter_test16ImmutableCounterVAA0D0A2aDP9incrementSiyFTW
+  method #Counter.decrement: <Self where Self : Counter> (Self) -> () -> Int : @$s12counter_test16ImmutableCounterVAA0D0A2aDP9decrementSiyFTW
+}

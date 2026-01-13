@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "vc_ir",
+    "compiler/rustc_vc",
+    "backends/z3",  # trust_z3 crate (Z3 SMT solver bindings)
+    "backends/z4",  # trust_z4 crate (Z4 pure Rust SMT solver)
+    "backends/crown",
+    "trust_macros",
+    "examples/sorting",
+    "tools/upstream-tracker",  # Upstream Rust sync tool
+    "crates/tla-extract",      # TLA2 state machine extraction
+]
+exclude = [
+    "upstream",  # rustc fork is its own workspace
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dropbox/dLANG/tRust"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }

@@ -1,0 +1,24 @@
+{
+  "function_name": "divide",
+  "source_file": "math.swift",
+  "source_line": 20,
+  "source_column": 1,
+  "parameters": [
+    {"name": "a", "type": {"kind": "Int", "signed": true, "bits": 64}, "index": 0},
+    {"name": "b", "type": {"kind": "Int", "signed": true, "bits": 64}, "index": 1}
+  ],
+  "return_type": {"kind": "Int", "signed": true, "bits": 64},
+  "requires": [],
+  "ensures": [],
+  "invariants": [],
+  "auto_vcs": [
+    {
+      "kind": "DivByZero",
+      "divisor": {"kind": "ParamRef", "name": "b", "index": 1},
+      "description": "Division by b may fail if b == 0",
+      "source_line": 21,
+      "source_column": 10
+    }
+  ],
+  "is_trusted": false
+}

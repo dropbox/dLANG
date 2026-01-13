@@ -1,0 +1,20 @@
+# Cargo configuration for tRust
+#
+# Z3 SMT Solver Setup (macOS/Homebrew):
+#   brew install z3
+#
+# The environment variables below configure z3-sys to find the Z3 installation.
+
+[env]
+# Z3 header location (required for z3-sys crate)
+Z3_SYS_Z3_HEADER = "/opt/homebrew/include/z3.h"
+
+# Library path for Z3 shared library
+LIBRARY_PATH = "/opt/homebrew/lib"
+
+# pkg-config path for Z3
+PKG_CONFIG_PATH = "/opt/homebrew/lib/pkgconfig"
+
+[build]
+# Enable parallel compilation
+jobs = 8
