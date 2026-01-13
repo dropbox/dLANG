@@ -18,7 +18,7 @@ Verified compiler tooling from Dropbox.
 | **tC** | Trusted C. ACSL specs + Clang translation validation. | Planned |
 | **tcore** | Shared verification core for tRust/tSwift/tC ecosystem. | Planned |
 | **rustc-index-verified** | Formally verified rustc_index. Proving Rust compiler internals correct. | Planned |
-| **tensor-forge** | Verified tensor ops for Apple Silicon. | Planned |
+| **mly** | Verified tensor ops for Apple Silicon. | Planned |
 
 ## License
 
