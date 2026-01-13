@@ -3,7 +3,7 @@
 ![Status](https://img.shields.io/badge/status-preview-orange)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 
-Verified compiler tooling from Dropbox.
+Verified compiler tooling.
 
 ## Thesis
 
@@ -13,12 +13,12 @@ Verified compiler tooling from Dropbox.
 
 | Project | Description | Status |
 |---------|-------------|--------|
-| **tRust** | Trusted Rust. Compilation = proof. Transpiles to verified Rust with z4 backend. | Planned |
-| **tSwift** | Trusted Swift. Same approach for iOS/macOS. Coordinates FFI with tRust. | Planned |
-| **tC** | Trusted C. ACSL specs + Clang translation validation. | Planned |
+| **tRust** | Trusted Rust. Compilation = proof. Transpiles to verified Rust with z4 backend. | Preview |
+| **tSwift** | Trusted Swift. Same approach for iOS/macOS. Coordinates FFI with tRust. | Preview |
+| **tC** | Trusted C. ACSL specs + Clang translation validation. | Preview |
 | **tcore** | Shared verification core for tRust/tSwift/tC ecosystem. | Planned |
-| **rustc-index-verified** | Formally verified rustc_index. Proving Rust compiler internals correct. | Planned |
-| **mly** | Verified tensor ops for Apple Silicon. | Planned |
+| **rustc-index-verified** | Formally verified rustc_index. Proving Rust compiler internals correct. | Preview |
+| **mly** | Verified tensor ops for Apple Silicon. | Preview |
 
 ## License
 
