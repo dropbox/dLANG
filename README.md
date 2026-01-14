@@ -5,6 +5,8 @@
 
 Verified compiler tooling.
 
+*All d* projects are entirely AI generated.*
+
 ## Thesis
 
 **Compilation should be proof.** Every runtime check is an admission that the compiler didn't do its job. These compilers generate code with machine-checkable correctness guarantees—memory safety, bounds checking, invariant preservation—all verified at compile time, not hoped for at runtime. When tRust compiles, you don't just get a binary; you get a proof.
