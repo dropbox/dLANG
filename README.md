@@ -5,7 +5,7 @@
 
 Verified compiler tooling.
 
-*All d* projects are entirely AI generated.*
+> All d* projects are entirely AI generated.
 
 ## Thesis
 
